@@ -4,72 +4,59 @@ import time
 import re
 import json
 
-# --- CONFIGURATIE & SETUP ---
-st.set_page_config(page_title="Authority Engine v21.0 | Final Sentinel", layout="wide")
+# --- CONFIGURATIE ---
+st.set_page_config(page_title="Authority Engine v22.0 | The Publisher's Choice", layout="wide")
 
 try:
     client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 except Exception:
-    st.error("Kritieke fout: OpenAI API-sleutel ontbreekt in Secrets.")
+    st.error("API-sleutel niet gevonden.")
 
 def count_words(text):
     return len(text.split())
 
-# --- DE REDACTIONELE WET (V21.0) ---
-BLACK_LIST = [
-    "oase", "harmonie", "samenspel", "ontdek", "essentieel", "cruciaal", "wereld van verschil", 
-    "baken", "feniks", "horizon", "prachtig", "uniek", "krachtig", "navigeren", "beleving", 
-    "perfect", "optimaal", "partner", "tand des tijds", "geoliede machine", "paradigma",
-    "het draait allemaal om", "in deze moderne tijd", "belangrijk om te onthouden"
-]
-
-GOLDEN_EXAMPLE = """
-"Er is een specifiek soort zaterdagmorgen-energie die alleen ontstaat wanneer je de knoop doorhakt: die overvolle berging gaat leeg, die vintage designkast komt er eindelijk... Het passen en meten met een openstaande achterklep en drie spanbanden voelt niet langer als een ludiek avontuur, maar als onnodige stress."
+# --- DE NIEUWE REDACTIONELE STANDAARD (Nuchter & Zakelijk) ---
+EDITORIAL_STANCE = """
+- STIJL: Lifestyle-journalistiek (Denk aan: Kassa, Radar, of de weekendbijlage van een krant). 
+- TOON: Direct, nuchter, adviserend zonder 'vriendelijk' te zijn. 
+- GEEN POËZIE: Geen metaforen over dansende kasten of stomme reuzen. 
+- FOCUS: De logistiek van het wonen. De keuze voor materialen. De prijs-kwaliteitverhouding van {client}.
+- VERBODEN: oase, harmonie, samenspel, ontdek, essentieel, cruciaal, wereld van verschil, baken, feniks, horizon, prachtig, uniek, krachtig, beleving, partner, de tand des tijds.
 """
 
 # --- AGENT PROMPTS ---
 
-ARCHITECT_PROMPT = f"""Jij bent de Lead Strategist. Ontwerp een blueprint voor {{target}} woorden over {{url}}.
-STYLE: Gebruik de nuchtere, observerende toon van: "{GOLDEN_EXAMPLE}"
+ARCHITECT_PROMPT = f"""Jij bent een Content Director. Ontwerp een essay-structuur voor {{target}} woorden over {{url}}.
+{EDITORIAL_STANCE}
 
-EISEN:
-1. Plan 4 H2-hoofdstukken gebaseerd op 'frictie' en 'textuur' (bijv. de geur van karton, het gewicht van een plank, het gebrek aan licht).
-2. Geen verkoop-praat. Geen handleidingen.
-3. Focus 100% op de realiteit van de productcategorie op {{url}}.
+STRICTE OPDRACHT:
+1. Plan 4 H2-hoofdstukken over: 
+   - De frustratie van ruimtegebrek in de Randstad/gemiddeld huis.
+   - De technische keuze: schuifdeur vs. draaideur (praktische logica).
+   - Materiaalkennis: MDF, spaanplaat, massief hout. Wat koop je voor welk budget?
+   - Logistiek: Van bestelling bij {{client}} naar een gemonteerde kast.
 """
 
-WRITER_PROMPT = f"""Jij bent een Ghostwriter voor een kritische columnist. Je haat 'content' en schrijft alleen verhalen.
+WRITER_PROMPT = f"""Jij bent een nuchtere consumentenjournalist. Je schrijft voor {target_domain}.
 
-JOUW STEM:
-- Gebruik 'Show, Don't Tell'. Beschrijf inbussleutels, scharnieren, stofnesten en spaanplaat.
-- ZINSBOUW: Varieer. Korte, botte zinnen afgewisseld met diepe observaties.
-- VERBODEN: {", ".join(BLACK_LIST)}
-- GEEN META: Praat nooit over de tekst zelf of 'het belang van'.
+{EDITORIAL_STANCE}
 
-TARGET: {{section_target}} woorden.
+JOUW OPDRACHT:
+- Schrijf hoofdstuk {{n}}. 
+- Gebruik concrete details: afmetingen, schroeven, inbussleutels, het gewicht van een jas, de vierkante meterprijs van een slaapkamer.
+- EIS: Schrijf minimaal {{section_target}} woorden. Gebruik GEEN inleidingen.
+- ANKER-CHECK: Gebruik het woord '{{anchor}}' minimaal 2 keer in deze tekst.
 """
 
-ASSEMBLER_PROMPT = """Jij bent de Eindredacteur. Smeed de teksten aaneen tot een vloeiend essay.
-1. Verwijder elke zin die klinkt als marketing of AI-opvulling.
-2. Verwijder conclusies zoals "Kortom" of "Samenvattend".
-3. Behoud de rauwe textuur en de feiten.
+ASSEMBLER_PROMPT = """Jij bent de Hoofdredacteur. 
+1. Verwijder elke zin die te 'mooi' of 'literair' is. Maak het nuchter.
+2. Zorg dat de overgangen tussen de hoofdstukken zakelijk zijn.
+3. Check het volume: we mikken op {target} woorden.
+4. Genereer Metadata: Title (direct), Meta (informatief), Slug.
 """
 
-SCORER_PROMPT = """Jij bent een AI-detector. SCORE < 10 ALS:
-- De tekst woorden uit de blacklist bevat.
-- De tekst leest als een handleiding of brochure.
-- De tekst te beleefd of te 'vriendelijk' is.
-
-JSON OUTPUT:
-{{
-    "score": 100,
-    "reasoning": "Leg uit waarom de tekst nog te veel naar AI ruikt.",
-    "slop_detected": []
-}}
-"""
-
-# --- AI ENGINE FUNCTIE ---
-def call_ai(prompt, system_instruction, temp=0.85):
+# --- AI ENGINE ---
+def call_ai(prompt, system_instruction, temp=0.75):
     response = client.chat.completions.create(
         model="gpt-4o",
         messages=[
@@ -80,80 +67,55 @@ def call_ai(prompt, system_instruction, temp=0.85):
     )
     return response.choices[0].message.content
 
-# --- UI INTERFACE ---
-st.title("🛡️ Authority Engine v21.0")
-st.subheader("The Final Sentinel | Industrial Grade Human-Like Content")
+# --- UI ---
+st.title("🛡️ Authority Engine v22.0")
+st.subheader("The Publisher's Choice | No-Nonsense Content Production")
 
 with st.sidebar:
     st.header("📋 Briefing")
     client_name = st.text_input("Klant", value="VidaXL NL")
     target_url = st.text_input("Target URL", value="https://www.vidaxl.nl/g/4063/kledingkasten")
     anchor_text = st.text_input("Ankertekst", value="kledingkast")
-    target_domain = st.text_input("Publisher", value="dagelijksestandaard.nl")
+    target_domain = st.text_input("Platform", value="dagelijksestandaard.nl")
     word_count_target = st.slider("Target Woorden", 600, 1500, 950, step=50)
     
-    start_btn = st.button("EXECUTE PRODUCTION", type="primary")
+    start_btn = st.button("PRODUCEER ASSET", type="primary")
 
 if start_btn:
     start_time = time.time()
-    with st.status("🚀 Pijplijn gestart...", expanded=True) as status:
+    with st.status("🏗️ Productie in uitvoering...", expanded=True) as status:
         
         # FASE 1: ARCHITECT
-        st.write("📐 Architectuur ontwerpen (Context-Lock op URL)...")
-        blueprint = call_ai(f"Project: {target_url}", 
-                            ARCHITECT_PROMPT.format(target=word_count_target, url=target_url, client=client_name))
+        st.write("📐 Architectuur vergrendelen op praktische thema's...")
+        blueprint = call_ai(f"Plan voor {target_url}", 
+                            ARCHITECT_PROMPT.format(target=word_count_target, url=target_url, client=client_name, platform=target_domain))
         
-        # FASE 2: SEQUENTIAL WRITING
+        # FASE 2: WRITING
         sections = re.split(r'##', blueprint)[1:]
         full_raw_content = ""
-        section_target = int(word_count_target // 4)
+        # We verhogen de target per sectie om volume-onderdrukking tegen te gaan
+        section_target = int((word_count_target // 4) + 100)
         
         for i, s in enumerate(sections):
-            st.write(f"🖋️ Ghostwriting sectie {i+1}...")
-            section_text = call_ai(f"H2 Sectie Plan: {s}", 
-                                    WRITER_PROMPT.format(section_target=section_target, client=client_name))
+            st.write(f"🖋️ Journalist schrijft Hoofdstuk {i+1}...")
+            section_text = call_ai(f"H2 Sectie: {s}", 
+                                    WRITER_PROMPT.format(n=i+1, section_target=section_target, client=client_name, anchor=anchor_text))
             full_raw_content += f"\n\n## {section_text}"
-            time.sleep(0.5)
 
-        # FASE 3: ASSEMBLY & PRUNING
-        st.write("✨ Assembleren en opschonen...")
-        assembled_text = call_ai(f"Smeed dit aaneen tot een essay:\n{full_raw_content}", ASSEMBLER_PROMPT, temp=0.5)
+        # FASE 3: ASSEMBLY
+        st.write("✨ Eindredactie (Nuchterheids-check)...")
+        final_article = call_ai(f"Assemblage van:\n{full_raw_content}", 
+                                ASSEMBLER_PROMPT.format(target=word_count_target), temp=0.4)
         
-        # FASE 4: PYTHON TECHNICAL ENFORCEMENT (De 'Iron Link')
-        # We vertrouwen de AI niet. We injecteren de link zelf op de eerste match.
-        try:
-            pattern = re.compile(re.escape(anchor_text), re.IGNORECASE)
-            final_article = pattern.sub(f"[{anchor_text}]({target_url})", assembled_text, count=1)
-        except:
-            final_article = assembled_text # Fallback
+        # FASE 4: PYTHON TECHNICAL LINK INJECTION
+        # Dit is de enige manier om 100% garantie te hebben op de link.
+        pattern = re.compile(re.escape(anchor_text), re.IGNORECASE)
+        final_article = pattern.sub(f"[{anchor_text}]({target_url})", final_article, count=1)
 
-        # FASE 5: AUDIT
-        st.write("🧐 Finale kwaliteits-audit...")
-        score_raw = call_ai(f"Audit tekst:\n\n{final_article}", SCORER_PROMPT.format(target=word_count_target), temp=0.1)
-        try:
-            score_data = json.loads(re.search(r'\{.*\}', score_raw, re.DOTALL).group())
-            final_score = score_data.get("score", 0)
-        except:
-            final_score = 50
-            score_data = {"reasoning": "Audit parsing failed"}
-
-        duration = int(time.time() - start_time)
-        status.update(label=f"✅ Asset Voltooid in {duration}s", state="complete")
+        status.update(label=f"✅ Gereed in {int(time.time() - start_time)}s", state="complete")
 
     # --- OUTPUT ---
-    tab1, tab2 = st.tabs(["💎 Final Asset", "📊 Audit Log"])
-    
-    with tab1:
-        c_final = count_words(final_article)
-        st.metric("Volume", f"{c_final} woorden", delta=int(c_final - word_count_target))
-        
-        if final_score < 80:
-            st.warning(f"Kwaliteitsscore: {final_score}/100. Reden: {score_data.get('reasoning')}")
-        
-        st.markdown("---")
-        st.markdown(final_article)
-        st.download_button("Download Markdown", final_article, file_name=f"{client_name}_asset.md")
-        
-    with tab2:
-        st.json(score_data)
-        st.text_area("Blueprint", blueprint)
+    c_final = count_words(final_article)
+    st.metric("Volume", f"{c_final} woorden", delta=int(c_final - word_count_target))
+    st.markdown(final_article)
+    st.download_button("Download", final_article, file_name="asset.md")
