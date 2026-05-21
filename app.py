@@ -5,46 +5,66 @@ import re
 import json
 
 # --- CONFIGURATIE ---
-st.set_page_config(page_title="Authority Engine v37.0 | Contextual Weaver", layout="wide")
+st.set_page_config(page_title="Authority Engine v38.0 | Resilient Weaver", layout="wide")
 
 try:
     client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 except Exception:
     st.error("Kritieke fout: API-sleutel ontbreekt.")
 
-# --- HELPERS ---
+# --- ROBUUSTE HELPERS ---
 def count_words(text):
     return len(text.split())
 
 def clean_json_string(raw_string):
-    clean = re.sub(r'```json\s*|```', '', raw_string)
-    return clean.strip()
+    """Vindt de eerste '{' en de laatste '}' om pure JSON te extraheren."""
+    try:
+        start = raw_string.find('{')
+        end = raw_string.rfind('}') + 1
+        if start == -1 or end == 0:
+            return None
+        json_str = raw_string[start:end]
+        return json_str
+    except:
+        return None
 
-# --- SYSTEM PROMPTS (v37.0) ---
+# --- SYSTEM PROMPTS (v38.0) ---
 
-STRATEGIST_SYSTEM = """Jij bent een Hoofdredacteur. Je ontwerpt een artikel dat NAADLOOS past bij de publisher.
-PUBLISHER CONTEXT: {publisher_info}
-PRODUCT URL: {url}
+STRATEGIST_SYSTEM = """Jij bent een Hoofdredacteur. Je ontwerpt een essay-structuur.
+TAAK: Maak een brug tussen de PUBLISHER NICHE en het PRODUCT.
+EIS: De tekst moet 100% aanvoelen als een artikel van de publisher.
+LEVER UITSLUITEND JSON.
 
+SCHEMA:
+{{
+  "title": "Kop van het artikel",
+  "h2_1": "Titel eerste sectie",
+  "focus_1": "Beschrijving inhoud",
+  "h2_2": "Titel tweede sectie",
+  "focus_2": "Beschrijving inhoud",
+  "h2_3": "Titel derde sectie",
+  "focus_3": "Beschrijving inhoud",
+  "h2_4": "Titel vierde sectie",
+  "focus_4": "Beschrijving inhoud"
+}}"""
+
+WRITER_SYSTEM = """Jij bent de auteur van: {publisher_info}. 
+Schrijf in JOUW eigen unieke stijl. Gebruik jargon uit jouw niche.
+EIS: GEEN bulletpoints. Schrijf uitsluitend LOPENDE ALINEA'S.
+VERBODEN: oase, cruciaal, essentieel, wereld van verschil, harmonie, esthetiek."""
+
+EDITOR_SYSTEM = """Jij bent de eindredacteur. Smeed de tekst aaneen tot een essay van {target} woorden.
 TAAK:
-1. Verzin een thema dat 100% past bij de publisher (bijv. 'De kunst van urenlang tafelen' of 'Gastvrijheid met een vleugje citroen').
-2. Gebruik de 'Thematische Brug': Start bij de niche van de publisher (koken/recepten) en eindig bij het belang van goed zitten ({anchor}).
-3. SCHEMA: {{ "title": "Kop", "sections": [ {{ "h2": "Kop", "focus": "inhoud", "link_logic": "hoe weven we de link hierin?" }} ] }}
-"""
+1. Integreer de marker [ANCHOR_SPOT] naadloos in een zin die de lezer adviseert.
+2. Zorg dat de overgang van {publisher_info} naar de ankertekst '{anchor}' logisch en nuchter is.
+3. Gebruik ## voor koppen en ** voor nadruk.
 
-WRITER_SYSTEM = """Jij bent de auteur van de website: {publisher_info}. 
-Schrijf in JOUW eigen stijl. Gebruik woorden die passen bij jouw niche (bijv. zuren, aroma's, bereidingstijd, textuur).
-EIS: Geen droge opsommingen van materialen. Schrijf een verhalend essay.
-VERBODEN: oase, cruciaal, essentieel, wereld van verschil, esthetiek."""
-
-EDITOR_SYSTEM = """Jij bent de eindredacteur. Smeed het geheel aaneen.
-TAAK:
-1. De link [{anchor}]({url}) MOET midden in een zin staan die gaat over de ERVARING van de lezer op deze site.
-2. Zorg dat de overgang van de niche (bijv. citroenen) naar het anker ({anchor}) niet aanvoelt als een advertentie, maar als een logisch advies voor de thuiskok/genieter.
-3. Gebruik ## en ** voor scannability.
-
-SCHEMA: {{ "title": "Kop", "meta": "Meta", "body": "Tekst met [ANCHOR_SPOT]" }}
-"""
+LEVER UITSLUITEND JSON:
+{{
+  "title": "Definitieve Kop",
+  "meta": "Meta omschrijving",
+  "body": "Volledige tekst met ## en [ANCHOR_SPOT]"
+}}"""
 
 # --- AI WRAPPER ---
 def call_ai(system, prompt, temp=0.7, json_mode=False):
@@ -56,11 +76,12 @@ def call_ai(system, prompt, temp=0.7, json_mode=False):
             response_format={"type": "json_object"} if json_mode else None
         )
         return response.choices[0].message.content
-    except Exception as e: return f"ERROR: {str(e)}"
+    except Exception as e:
+        return f"ERROR: {str(e)}"
 
-# --- UI ---
-st.title("🛡️ Authority Engine v37.0")
-st.caption("Contextual Weaver | Publishers-first AI Production")
+# --- UI INTERFACE ---
+st.title("🛡️ Authority Engine v38.0")
+st.caption("Resilient Weaver | Context-Aware & Crash-Proof")
 
 with st.sidebar:
     st.header("📋 Master Briefing")
@@ -69,35 +90,53 @@ with st.sidebar:
     
     st.divider()
     publisher_info = st.text_area("Publisher Niche", value="Culinaire website met eenvoudige recepten en de biologische citroen in de hoofdrol.")
-    word_count_target = st.slider("Target", 600, 1500, 950)
-    start_btn = st.button("WEAVE CONTENT", type="primary")
+    word_count_target = st.slider("Target Woorden", 600, 1500, 950)
+    start_btn = st.button("WEAVE MASTER ASSET", type="primary")
 
 if start_btn:
     start_time = time.time()
     
-    with st.status("🏗️ Thematische brug bouwen...", expanded=True) as status:
+    with st.status("🏗️ Sovereign Weaver activeert...", expanded=True) as status:
         
-        # 1. STRATEGIST (Contextuele Koppeling)
-        st.write("📐 Fase 1: Niche-analyse en brug-ontwerp...")
-        strat_sys = STRATEGIST_SYSTEM.format(publisher_info=publisher_info, url=target_url, anchor=anchor_text)
-        blueprint_raw = call_ai(strat_sys, "Ontwerp de rode draad.", json_mode=True)
-        blueprint = json.loads(clean_json_string(blueprint_raw))
+        # 1. STRATEGIST
+        st.write("📐 Fase 1: Thematische brug ontwerpen...")
+        strat_raw = call_ai(STRATEGIST_SYSTEM, f"URL: {target_url}. Publisher: {publisher_info}. Target: {word_count_target}", json_mode=True)
+        clean_strat = clean_json_string(strat_raw)
+        
+        if not clean_strat:
+            st.error("Kritieke fout: AI weigert JSON te leveren in de Strategist-fase.")
+            st.code(strat_raw)
+            st.stop()
+            
+        blueprint = json.loads(clean_strat)
 
-        # 2. WRITER (Niche-specifiek schrijven)
-        st.write(f"🖋️ Fase 2: Schrijven vanuit de '{publisher_info}' gedachte...")
+        # 2. WRITER (Parallelle sectie-opbouw)
+        st.write(f"🖋️ Fase 2: Schrijven in de stijl van '{publisher_info}'...")
         full_draft = ""
-        for section in blueprint["sections"]:
-            write_sys = WRITER_SYSTEM.format(publisher_info=publisher_info, ban_list="oase, cruciaal")
-            draft = call_ai(write_sys, f"H2: {section['h2']}\nFocus: {section['focus']}\nTarget: 250 woorden.")
-            full_draft += f"\n\n## {section['h2']}\n{draft}"
+        # We halen de 4 secties uit de platte JSON
+        for i in range(1, 5):
+            h2_key = f"h2_{i}"
+            focus_key = f"focus_{i}"
+            st.write(f"  ✍️ Hoofdstuk {i}: {blueprint[h2_key]}")
+            
+            write_prompt = f"Onderwerp: {blueprint[h2_key]}. Focus: {blueprint[focus_key]}. Target: 250 woorden."
+            draft = call_ai(WRITER_SYSTEM.format(publisher_info=publisher_info), write_prompt)
+            full_draft += f"\n\n## {blueprint[h2_key]}\n{draft}"
 
-        # 3. EDITOR (Chirurgische Link-integratie)
-        st.write("✨ Fase 3: Redactie & Link-weving...")
-        editor_sys = EDITOR_SYSTEM.format(anchor=anchor_text, url=target_url, publisher_context=publisher_info)
-        editor_raw = call_ai(editor_sys, f"Smeed aaneen:\n{full_draft}", json_mode=True)
-        final_data = json.loads(clean_json_string(editor_raw))
+        # 3. EDITOR
+        st.write("✨ Fase 3: Eindredactie & Link-integratie...")
+        editor_sys = EDITOR_SYSTEM.format(target=word_count_target, anchor=anchor_text, url=target_url, publisher_info=publisher_info)
+        editor_raw = call_ai(editor_sys, f"Smeed dit aaneen tot een naadloos essay:\n{full_draft}", json_mode=True)
+        clean_editor = clean_json_string(editor_raw)
+        
+        if not clean_editor:
+            st.error("Kritieke fout: Editor leverde ongeldige JSON.")
+            st.code(editor_raw)
+            st.stop()
+            
+        final_data = json.loads(clean_editor)
 
-        # 4. PYTHON INJECTION
+        # 4. PYTHON INJECTION (De absolute garantie)
         body = final_data["body"]
         if "[ANCHOR_SPOT]" in body:
             body = body.replace("[ANCHOR_SPOT]", f"[{anchor_text}]({target_url})", 1)
@@ -107,9 +146,15 @@ if start_btn:
             body = pattern.sub(f"[{anchor_text}]({target_url})", body, count=1)
         
         final_data["body"] = body
-        status.update(label="✅ Asset Weaved", state="complete")
+        status.update(label="✅ Content Succesvol Geweven", state="complete")
 
     # --- OUTPUT ---
     st.header(final_data['title'])
     st.markdown(final_data['body'])
-    st.download_button("Download Asset", final_data['body'], file_name="niche_asset.md")
+    
+    with st.expander("Metadata & QA"):
+        st.write(f"**Volume:** {count_words(final_data['body'])} woorden")
+        st.write(f"**Meta Description:** {final_data.get('meta', 'Geen meta')}")
+        st.write(f"**Link Check:** {'✅' if f'({target_url})' in final_data['body'] else '❌'}")
+
+    st.download_button("Download Asset", final_data['body'], file_name="publisher_asset.md")
