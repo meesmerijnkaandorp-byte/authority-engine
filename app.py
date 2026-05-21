@@ -5,14 +5,14 @@ import re
 import json
 
 # --- CONFIGURATIE ---
-st.set_page_config(page_title="Authority Engine v35.0 | Versatile Authority", layout="wide")
+st.set_page_config(page_title="Authority Engine v36.0 | Linguistic Surgeon", layout="wide")
 
 try:
     client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 except Exception:
-    st.error("Kritieke fout: API-sleutel ontbreekt in Secrets.")
+    st.error("Kritieke fout: API-sleutel ontbreekt.")
 
-# --- UTILS ---
+# --- HELPERS ---
 def count_words(text):
     return len(text.split())
 
@@ -20,38 +20,37 @@ def clean_json_string(raw_string):
     clean = re.sub(r'```json\s*|```', '', raw_string)
     return clean.strip()
 
-# --- SYSTEM PROMPTS (v35.0) ---
+# --- SYSTEM PROMPTS (v36.0) ---
 
 STRATEGIST_SYSTEM = """Jij bent een Content Architect. Je levert UITSLUITEND JSON.
-TAAK: Ontwerp een essay-structuur van {target} woorden.
-EIS: Plan uitsluitend LOPENDE tekst. GEEN opsommingen of lijstjes.
+TAAK: Ontwerp een essay-structuur van {target} woorden. 
+EIS: Geen inleidingen over 'belangrijkheid'. Focus op de frictie van het onderwerp.
 SCHEMA:
 {{
   "sections": [
-    {{ "h2": "Kop", "key_points": ["punt 1", "punt 2"], "friction": "Het onderliggende probleem" }}
+    {{ "h2": "Kop", "key_points": ["punt 1", "punt 2"], "friction": "Waarom het in de praktijk vaak misgaat" }}
   ]
 }}"""
 
-WRITER_SYSTEM = """Jij bent een Senior Journalist. Schrijf rauw, feitelijk en zonder franje.
+WRITER_SYSTEM = """Jij bent een Senior Journalist. Schrijf rauw en feitelijk.
 STRICTE EISEN:
-1. GEEN BULLETPOINTS. Gebruik uitsluitend volledige alinea's.
-2. TOON: Nuchter en observerend (denk aan de 'zaterdagmorgen-energie').
-3. DETAILS: Benoem materialen, gewicht, geluid en weerstand.
-4. VERBODEN: {ban_list}"""
+1. GEEN LIJSTJES. Gebruik uitsluitend lopende tekst.
+2. VERBODEN WOORDEN: {ban_list}, cruciale rol, essentieel, esthetiek, harmonie, samenspel.
+3. FOCUS: Gebruik concrete details (gewicht, materiaal, geluid)."""
 
 EDITOR_SYSTEM = """Jij bent de Hoofdredacteur. Je levert UITSLUITEND JSON.
-TAAK:
-1. Smeed de hoofdstukken aaneen tot een naadloos essay van {target} woorden.
-2. VERWIJDER ELKE BULLETPOINT. Vertaal lijsten naar sterke, vloeiende alinea's.
-3. LINK-INTEGRATIE: Plaats de marker [ANCHOR_SPOT] op een plek waar de zin klopt met '{anchor}'.
-   
-LINK-LOGICA ({a_mode}):
-- Exact Match: De zin MOET grammaticaal kloppen met de exacte woorden '{anchor}'. 
-- Natuurlijk: Je mag de ankertekst licht aanpassen (meervoud/verbuiging) voor een perfecte loop.
+TAAK: Smeed de tekst aaneen tot een vloeiend essay van {target} woorden.
+
+LINK-INTEGRATIE ({a_mode}):
+Je MOET de marker [ANCHOR_SPOT] verwerken in een zin die grammaticaal perfect loopt met de term '{anchor}'.
+Hanteer voor '{anchor}' een van deze structuren:
+- "Wie overweegt een [ANCHOR_SPOT], doet er goed aan te letten op..."
+- "Het proces van een [ANCHOR_SPOT] wordt vaak onderschat door..."
+- "In de zoektocht naar een [ANCHOR_SPOT] bij een specialist als {client} valt op dat..."
 
 SCHEMA:
 {{
-  "title": "Titel", "meta": "Meta", "slug": "slug", "body": "## Kop\\n\\nTekst met [ANCHOR_SPOT]..."
+  "title": "Titel", "meta": "Meta", "slug": "slug", "body": "Tekst met [ANCHOR_SPOT]"
 }}"""
 
 # --- AI WRAPPER ---
@@ -66,9 +65,9 @@ def call_ai(system, prompt, temp=0.7, json_mode=False):
         return response.choices[0].message.content
     except Exception as e: return f"ERROR: {str(e)}"
 
-# --- UI INTERFACE ---
-st.title("🛡️ Authority Engine v35.0")
-st.caption("Versatile Authority Engine | Exact Match & Narrative Integrity")
+# --- UI ---
+st.title("🛡️ Authority Engine v36.0")
+st.caption("The Linguistic Surgeon | Geen loshangende ankerteksten meer")
 
 with st.sidebar:
     st.header("📋 Briefing")
@@ -78,58 +77,53 @@ with st.sidebar:
     anchor_mode = st.radio("Link Modus", ["Exact Match", "Natuurlijk/Vloeiend"])
     
     st.divider()
-    publisher_context = st.text_area("Publisher", value="Lifestyle blog, volwassen publiek, nuchtere toon.")
-    page_summary = st.text_area("Landingspagina", value="Eetkamerstoelen, diverse materialen (hout/metaal), focus op prijs-kwaliteit.")
+    publisher_context = st.text_area("Publisher", value="Nuchter woonblog, geen marketing-bullshit.")
     word_count_target = st.slider("Target Woorden", 600, 1500, 950)
     start_btn = st.button("PRODUCEER ASSET", type="primary")
 
 if start_btn:
     start_time = time.time()
-    ban_list = ["oase", "essentieel", "cruciaal", "wereld van verschil", "esthetiek", "harmonie", "samenspel"]
+    # Uitgebreide zwarte lijst met de clichés uit je feedback
+    ban_list = ["oase", "wereld van verschil", "belangrijkste rol", "fundamentele rol", "cruciaal", "essentieel"]
 
-    with st.status("🏗️ Sovereign Pipeline v35.0 activeert...", expanded=True) as status:
+    with st.status("🏗️ Taalkundige operatie bezig...", expanded=True) as status:
         
         # 1. STRATEGIST
-        st.write("📐 Blueprinting (No-List Policy)...")
+        st.write("📐 Blueprinting...")
         strat_sys = STRATEGIST_SYSTEM.format(target=word_count_target)
-        blueprint_raw = call_ai(strat_sys, f"Topic: {anchor_text}. Context: {page_summary}", json_mode=True)
+        blueprint_raw = call_ai(strat_sys, f"Onderwerp: {anchor_text}. Context: {publisher_context}", json_mode=True)
         blueprint = json.loads(clean_json_string(blueprint_raw))["sections"]
 
         # 2. WRITER
         full_draft = ""
         sec_target = word_count_target // len(blueprint)
         for i, section in enumerate(blueprint):
-            st.write(f"🖋️ Schrijven hoofdstuk {i+1}...")
-            write_prompt = f"H2: {section['h2']}\nKey points: {section['key_points']}\nFrictie: {section['friction']}\nTarget: {sec_target} woorden. GEEN LIJSTEN."
+            st.write(f"🖋️ Hoofdstuk {i+1} schrijven...")
+            write_prompt = f"H2: {section['h2']}\nFocus: {section['key_points']}\nFrictie: {section['friction']}\nTarget: {sec_target}w."
             draft = call_ai(WRITER_SYSTEM.format(ban_list=", ".join(ban_list)), write_prompt)
             full_draft += f"\n\n## {section['h2']}\n{draft}"
 
-        # 3. EDITOR (The Link Surgeon)
-        st.write("✨ Eindredactie & Link Injectie...")
-        editor_sys = EDITOR_SYSTEM.format(target=word_count_target, anchor=anchor_text, a_mode=anchor_mode, publisher_context=publisher_context)
-        editor_raw = call_ai(editor_sys, f"Smeed aaneen tot vloeiend essay:\n{full_draft}", json_mode=True)
+        # 3. EDITOR
+        st.write("✨ Chirurgische link-injectie...")
+        editor_sys = EDITOR_SYSTEM.format(target=word_count_target, anchor=anchor_text, a_mode=anchor_mode, client=client_name, publisher=publisher_context)
+        editor_raw = call_ai(editor_sys, f"Smeed aaneen en integreer de link naadloos:\n{full_draft}", json_mode=True)
         final_data = json.loads(clean_json_string(editor_raw))
 
-        # 4. FINAL POLISH
+        # 4. PYTHON POST-PROCESS
         body = final_data["body"]
-        if "[ANCHOR_SPOT]" in body:
-            body = body.replace("[ANCHOR_SPOT]", f"[{anchor_text}]({target_url})", 1)
-            body = body.replace("[ANCHOR_SPOT]", anchor_text)
-        else:
-            # Fallback regex
-            pattern = re.compile(re.escape(anchor_text), re.IGNORECASE)
-            body = pattern.sub(f"[{anchor_text}]({target_url})", body, count=1)
+        # We zorgen voor een spatie-correcte vervanging
+        link_markdown = f"[{anchor_text}]({target_url})"
+        body = body.replace("[ANCHOR_SPOT]", link_markdown, 1)
+        body = body.replace("[ANCHOR_SPOT]", anchor_text)
         
         final_data["body"] = body
-        status.update(label=f"✅ Gereed in {int(time.time() - start_time)}s", state="complete")
+        status.update(label="✅ Asset gereed", state="complete")
 
     # --- OUTPUT ---
-    st.metric("Gerealiseerd Volume", count_words(final_data['body']), delta=int(count_words(final_data['body']) - word_count_target))
-    
+    st.metric("Gerealiseerd Volume", count_words(final_data['body']))
     st.markdown(f"# {final_data['title']}")
     st.markdown(final_data['body'])
     
-    with st.expander("Audit & Metadata"):
-        st.write(f"**Meta:** {final_data['meta']}")
-        st.write(f"**Slug:** {final_data['slug']}")
-        st.write(f"**Link Mode:** {anchor_mode}")
+    with st.expander("Audit"):
+        st.write(f"**Anker gebruikt:** {anchor_text}")
+        st.write(f"**Link aanwezig:** {'Ja' if f'({target_url})' in final_data['body'] else 'Nee'}")
