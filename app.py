@@ -4,121 +4,169 @@ import time
 import re
 import json
 
-# --- CONFIGURATIE ---
-st.set_page_config(page_title="Authority Engine v25.0 | The Master Directive", layout="wide")
+# --- CONFIGURATIE & SETUP ---
+st.set_page_config(page_title="Authority Engine v31.0 | Marketplace Pro", layout="wide")
 
 try:
     client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 except Exception:
-    st.error("Kritieke fout: API-sleutel niet gevonden in Secrets.")
+    st.error("Kritieke fout: OpenAI API-sleutel ontbreekt. Check je Streamlit Secrets.")
 
 def count_words(text):
     return len(text.split())
 
-# --- DE GOUDEN STANDAARD (Lifestyle & Grit) ---
-STIJL_RICHTLIJN = """
-Kopieer de energie van dit voorbeeld: nuchter, beschouwend, menselijk.
-"Een huis fungeert als tegenwicht voor de drukte buiten. Een opgeruimde omgeving helpt om je hoofd leeg te maken. 
-Het gaat om het gevoel dat de ruimte je ondersteunt in plaats van afleidt."
-"""
+# --- DE REDACTIONELE STANDAARD (Niche-Agnostisch) ---
+GLOBAL_BAN_LIST = [
+    "oase", "harmonie", "samenspel", "essentieel", "cruciaal", "wereld van verschil", 
+    "baken", "feniks", "paradigma", "beleving", "ontdek", "uniek", "perfect", 
+    "tand des tijds", "geoliede machine", "in de moderne wereld", "is van groot belang"
+]
 
 # --- AGENT PROMPTS ---
 
-ARCHITECT_PROMPT = f"""Jij bent een Hoofdredacteur van een kwaliteitsmedium. 
-Ontwerp een essay-structuur voor {{target}} woorden over {{url}}.
+# 1. De Strateeg (Analyseert Niche & Publisher)
+STRATEGIST_PROMPT = """Jij bent een Senior Content Planner. Ontwerp een artikel-blueprint op basis van:
+KLANT: {client} | NICHE: {niche} | PUBLISHER: {publisher_info} | TARGET: {target} woorden.
 
-DOEL: Schrijf een diepgaand lifestyle-essay over mentale rust en de fysieke inrichting van je huis.
+TAAK:
+1. Analyseer de toon van de publisher.
+2. Plan 4 secties (H2) die NIET promotioneel zijn.
+3. Focus op 'High Utility Content': informatie waar de lezer echt iets aan heeft.
+4. Identificeer de 'frictie' in deze niche (bijv. bij Finance: onbegrijpelijk jargon; bij Home: montage-ellende).
 
-HOOFDSTUKKEN (H2):
-1. De psychologie van de drempel: Hoe de chaos van buiten je huis binnendringt.
-2. De slaapkamer als laatste fort: Waarom visuele rust hier essentieel is voor je herstel.
-3. De anatomie van orde: Hoe een goede {{anchor}} fungeert als het fundament van een opgeruimd leven.
-4. De kunst van het weglaten: Waarom minder bezit leidt tot meer mentale ademruimte.
-
-RICHTLIJN: {STIJL_RICHTLIJN}
+OUTPUT: Lever een JSON-blueprint met 4 secties en per sectie 3 kernpunten.
 """
 
-WRITER_PROMPT = """Jij bent een Senior Essayist. Je schrijft teksten met 'textuur'.
+# 2. De Ghostwriter (Focust op realisme, niet op poëzie)
+WRITER_PROMPT = """Jij bent een nuchtere vakjournalist. Schrijf hoofdstuk {n} over {section_title}.
+STIJL:
+- Gebruik 'Low-Key Realism'. Geen overdreven zintuiglijke stapeling.
+- Gebruik specifieke feiten, handelingen en gevolgen.
+- VERBODEN: {ban_list}
+- TONE: Pas je aan aan de publisher: {publisher_info}
 
-STIJLREGELS:
-- TOON: Nuchter en reflectief. 
-- DETAILS: Benoem tastbare zaken: het geluid van een hanger, de geur van linnen, het gewicht van een winterjas, de koelte van een handgreep.
-- VERBODEN (AI-SLOP): oase, harmonie, samenspel, ontdek, essentieel, cruciaal, wereld van verschil, beleving, uniek, prachtig.
-- ZINSBOUW: Varieer. Gebruik korte, krachtige zinnen voor nadruk.
-
-DOEL: Schrijf minimaal {section_target} woorden voor deze sectie.
+DOEL: {section_target} woorden. Geen inleiding, direct ter zake.
 """
 
-ASSEMBLER_PROMPT = """Jij bent de eindredacteur. Smeed de hoofdstukken aaneen tot één meesterwerk.
-1. VERWIJDER: Elke zin die klinkt als een verkoop-praatje of een handleiding.
-2. VERBETER: Zorg dat de overgang tussen psychologische rust en de praktische oplossing (de kast) natuurlijk voelt.
-3. VOLUME: Trim of breid uit tot we rond de {target} woorden zitten.
-4. SEO: Title, Meta Description (max 155 tekens), Slug.
+# 3. De Editor & Link Manager (Structured Output)
+EDITOR_PROMPT = """Jij bent de Hoofdredacteur. Je krijgt een ruwe tekst voor {client}.
+TAAK:
+1. Smeed de tekst aaneen tot een vloeiend geheel van {target} woorden.
+2. Verwijder alle 'AI-vulling' en gladde overgangen.
+3. Identificeer in de tekst de 3 meest natuurlijke plekken voor de ankertekst '{anchor}'.
+4. Genereer metadata.
+
+OUTPUT MOET STRIKTE JSON ZIJN:
+{{
+  "title": "...",
+  "meta": "...",
+  "slug": "...",
+  "body": "De volledige tekst met [ANCHOR_SPOT] op de 3 beste plekken.",
+  "qc_score": 0-100,
+  "audit_notes": "..."
+}}
 """
 
-# --- AI ENGINE ---
-def call_ai(prompt, system_instruction, temp=0.8):
-    response = client.chat.completions.create(
-        model="gpt-4o",
-        messages=[
-            {"role": "system", "content": system_instruction},
-            {"role": "user", "content": prompt}
-        ],
-        temperature=temp
-    )
-    return response.choices[0].message.content
+# --- ENGINE FUNCTIES ---
+
+def get_ai_response(prompt, system_instruction, temp=0.7, json_mode=False):
+    try:
+        response_format = {"type": "json_object"} if json_mode else None
+        response = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {"role": "system", "content": system_instruction},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=temp,
+            response_format=response_format
+        )
+        return response.choices[0].message.content
+    except Exception as e:
+        return f"ERROR: {str(e)}"
 
 # --- UI INTERFACE ---
-st.title("🛡️ Authority Engine v25.0")
-st.subheader("The Master Directive | Lifestyle Content for 2026")
+st.title("🚀 Authority Engine v31.0")
+st.caption("Marketplace Production Engine | Built for Scale & Quality")
 
 with st.sidebar:
-    st.header("📋 Briefing")
-    client_name = st.text_input("Klant", value="VidaXL")
-    target_url = st.text_input("Target URL", value="https://www.vidaxl.nl/g/4063/kledingkasten")
-    anchor_text = st.text_input("Ankertekst", value="kledingkast")
-    word_count_target = st.slider("Target Woorden", 600, 1500, 950, step=50)
+    st.header("📋 Order Briefing")
+    client_name = st.text_input("Klant", value="VidaXL NL")
+    niche = st.selectbox("Niche", ["Huis & Tuin", "Lifestyle", "Finance", "B2B", "Tech", "Travel", "Health"])
+    publisher_desc = st.text_area("Publisher Context", placeholder="Bijv: Landelijk nieuwsplatform, nuchtere toon, focus op besparen.")
     
     st.divider()
+    target_url = st.text_input("Target URL", value="https://www.vidaxl.nl/g/4063/kledingkasten")
+    anchor_text = st.text_input("Ankertekst", value="kledingkast")
+    anchor_type = st.radio("Anchor Type", ["Exact Match", "Partial Match", "Branded", "Generic"])
+    
+    word_count_target = st.slider("Target Woorden", 600, 1500, 950, step=50)
+    
     start_btn = st.button("EXECUTE PRODUCTION", type="primary")
 
 if start_btn:
     start_time = time.time()
-    with st.status("🏗️ Essay wordt geweven...", expanded=True) as status:
+    with st.status("🏗️ Engine draait...", expanded=True) as status:
         
-        # FASE 1: ARCHITECT
-        st.write("📐 Architectuur ontwerpen...")
-        blueprint = call_ai(f"Plan voor {target_url}", 
-                            ARCHITECT_PROMPT.format(target=word_count_target, url=target_url, client=client_name, anchor=anchor_text))
+        # 1. ANALYSE & BLUEPRINT
+        st.write("📐 Fase 1: Blueprint genereren...")
+        strat_sys = STRATEGIST_PROMPT.format(
+            client=client_name, niche=niche, publisher_info=publisher_desc, target=word_count_target
+        )
+        blueprint_json = get_ai_response("Start blueprinting", strat_sys, json_mode=True)
+        blueprint = json.loads(blueprint_json)
         
-        # FASE 2: WRITING
-        sections = re.split(r'##', blueprint)[1:]
-        full_raw_content = ""
-        # Precisie-berekening: target gedeeld door 4 secties, kleine marge voor de Assembler.
-        section_target = int(word_count_target // 4)
+        # 2. SECTIE PRODUCTIE
+        full_draft = ""
+        section_target = word_count_target // 4
         
-        for i, s in enumerate(sections):
-            st.write(f"🖋️ Essayist produceert hoofdstuk {i+1}...")
-            section_text = call_ai(f"Sectie: {s}", WRITER_PROMPT.format(section_target=section_target, anchor=anchor_text))
-            full_raw_content += f"\n\n## {section_text}"
+        for i, (title, details) in enumerate(blueprint.items()):
+            if i >= 4: break # Safety
+            st.write(f"🖋️ Fase 2.{i+1}: Schrijven sectie '{title}'...")
+            writer_sys = WRITER_PROMPT.format(
+                n=i+1, section_title=title, section_details=details, 
+                section_target=section_target, ban_list=", ".join(GLOBAL_BAN_LIST),
+                publisher_info=publisher_desc
+            )
+            section_draft = get_ai_response(f"Schrijf sectie {i+1}", writer_sys)
+            full_draft += f"\n\n## {title}\n{section_text if 'section_text' in locals() else section_draft}"
+        
+        # 3. EDITORIAL & LINK INJECTION
+        st.write("✨ Fase 3: Redactie & Structured Output...")
+        editor_sys = EDITOR_PROMPT.format(
+            target=word_count_target, client=client_name, anchor=anchor_text, url=target_url
+        )
+        final_json_raw = get_ai_response(f"Editoriaal polijsten van:\n{full_draft}", editor_sys, temp=0.5, json_mode=True)
+        
+        try:
+            final_data = json.loads(final_json_raw)
+            # Link Injection Logica: We pakken de 2e [ANCHOR_SPOT] voor een natuurlijke flow
+            body_with_link = final_data["body"].replace("[ANCHOR_SPOT]", f"[{anchor_text}]({target_url})", 1)
+            body_with_link = body_with_link.replace("[ANCHOR_SPOT]", anchor_text) # De rest van de spots worden gewone tekst
+            final_data["body"] = body_with_link
+        except Exception as e:
+            st.error(f"Assemblage fout: {e}")
+            final_data = {"body": full_draft, "title": "Error in JSON"}
 
-        # FASE 3: ASSEMBLY
-        st.write("✨ Redactionele polijstfase...")
-        final_article = call_ai(f"Assemblage van:\n{full_raw_content}", ASSEMBLER_PROMPT.format(target=word_count_target), temp=0.5)
-        
-        # FASE 4: PYTHON IRON-LINK INJECTION
-        # We zoeken de eerste 'kledingkast' (ongeacht hoofdletters) en maken er een link van.
-        pattern = re.compile(re.escape(anchor_text), re.IGNORECASE)
-        # We doen de vervanging alleen als de link er nog niet in staat.
-        if f"]({target_url})" not in final_article:
-            final_article = pattern.sub(f"[{anchor_text}]({target_url})", final_article, count=1)
-
-        status.update(label=f"✅ Asset voltooid in {int(time.time() - start_time)}s", state="complete")
+        duration = int(time.time() - start_time)
+        status.update(label=f"✅ Asset Gereed in {duration}s", state="complete")
 
     # --- OUTPUT ---
-    c_final = count_words(final_article)
-    st.metric("Volume", f"{c_final} woorden", delta=int(c_final - word_count_target))
+    t1, t2, t3 = st.tabs(["📄 Final Asset", "📊 Audit & Meta", "⚙️ Raw Data"])
     
-    st.markdown("---")
-    st.markdown(final_article)
-    st.download_button("Download Asset (.md)", final_article, file_name=f"{client_name}_lifestyle_essay.md")
+    with t1:
+        st.metric("Gerealiseerd Volume", count_words(final_data['body']), delta=int(count_words(final_data['body']) - word_count_target))
+        st.markdown(f"# {final_data.get('title', 'Geen titel')}")
+        st.markdown(final_data['body'])
+        
+    with t2:
+        st.subheader("SEO Metadata")
+        st.code(f"Title: {final_data.get('title')}\nMeta: {final_data.get('meta')}\nSlug: {final_data.get('slug')}")
+        st.divider()
+        st.subheader("Audit Notes")
+        st.info(final_data.get("audit_notes", "Geen opmerkingen."))
+        st.progress(final_data.get("qc_score", 0) / 100, text=f"QC Score: {final_data.get('qc_score')}%")
+
+    with t3:
+        st.json(final_data)
+        st.download_button("Download JSON Asset", json.dumps(final_data, indent=2), file_name="export.json")
