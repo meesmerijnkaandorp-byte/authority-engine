@@ -5,17 +5,17 @@ import re
 import json
 
 # --- CONFIGURATIE ---
-st.set_page_config(page_title="Authority Engine v22.0 | The Publisher's Choice", layout="wide")
+st.set_page_config(page_title="Authority Engine v22.1 | Scope Fix", layout="wide")
 
 try:
     client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 except Exception:
-    st.error("API-sleutel niet gevonden.")
+    st.error("API-sleutel niet gevonden in Secrets.")
 
 def count_words(text):
     return len(text.split())
 
-# --- DE NIEUWE REDACTIONELE STANDAARD (Nuchter & Zakelijk) ---
+# --- REDACTIONELE RICHTLIJNEN (Statische strings zonder f-prefix om NameErrors te voorkomen) ---
 EDITORIAL_STANCE = """
 - STIJL: Lifestyle-journalistiek (Denk aan: Kassa, Radar, of de weekendbijlage van een krant). 
 - TOON: Direct, nuchter, adviserend zonder 'vriendelijk' te zijn. 
@@ -24,28 +24,26 @@ EDITORIAL_STANCE = """
 - VERBODEN: oase, harmonie, samenspel, ontdek, essentieel, cruciaal, wereld van verschil, baken, feniks, horizon, prachtig, uniek, krachtig, beleving, partner, de tand des tijds.
 """
 
-# --- AGENT PROMPTS ---
-
-ARCHITECT_PROMPT = f"""Jij bent een Content Director. Ontwerp een essay-structuur voor {{target}} woorden over {{url}}.
-{EDITORIAL_STANCE}
+ARCHITECT_PROMPT = """Jij bent een Content Director. Ontwerp een essay-structuur voor {target} woorden over {url}.
+{stance}
 
 STRICTE OPDRACHT:
 1. Plan 4 H2-hoofdstukken over: 
    - De frustratie van ruimtegebrek in de Randstad/gemiddeld huis.
    - De technische keuze: schuifdeur vs. draaideur (praktische logica).
    - Materiaalkennis: MDF, spaanplaat, massief hout. Wat koop je voor welk budget?
-   - Logistiek: Van bestelling bij {{client}} naar een gemonteerde kast.
+   - Logistiek: Van bestelling bij {client} naar een gemonteerde kast.
 """
 
-WRITER_PROMPT = f"""Jij bent een nuchtere consumentenjournalist. Je schrijft voor {target_domain}.
+WRITER_PROMPT = """Jij bent een nuchtere consumentenjournalist. Je schrijft voor {platform}.
 
-{EDITORIAL_STANCE}
+{stance}
 
 JOUW OPDRACHT:
-- Schrijf hoofdstuk {{n}}. 
+- Schrijf hoofdstuk {n}. 
 - Gebruik concrete details: afmetingen, schroeven, inbussleutels, het gewicht van een jas, de vierkante meterprijs van een slaapkamer.
-- EIS: Schrijf minimaal {{section_target}} woorden. Gebruik GEEN inleidingen.
-- ANKER-CHECK: Gebruik het woord '{{anchor}}' minimaal 2 keer in deze tekst.
+- EIS: Schrijf minimaal {section_target} woorden. Gebruik GEEN inleidingen.
+- ANKER-CHECK: Gebruik het woord '{anchor}' minimaal 2 keer in deze tekst.
 """
 
 ASSEMBLER_PROMPT = """Jij bent de Hoofdredacteur. 
@@ -68,8 +66,8 @@ def call_ai(prompt, system_instruction, temp=0.75):
     return response.choices[0].message.content
 
 # --- UI ---
-st.title("🛡️ Authority Engine v22.0")
-st.subheader("The Publisher's Choice | No-Nonsense Content Production")
+st.title("🛡️ Authority Engine v22.1")
+st.subheader("Commercial Editorial Standard | Stability Update")
 
 with st.sidebar:
     st.header("📋 Briefing")
@@ -85,30 +83,42 @@ if start_btn:
     start_time = time.time()
     with st.status("🏗️ Productie in uitvoering...", expanded=True) as status:
         
-        # FASE 1: ARCHITECT
-        st.write("📐 Architectuur vergrendelen op praktische thema's...")
-        blueprint = call_ai(f"Plan voor {target_url}", 
-                            ARCHITECT_PROMPT.format(target=word_count_target, url=target_url, client=client_name, platform=target_domain))
+        # FASE 1: ARCHITECT (Render prompt met variabelen)
+        st.write("📐 Architectuur vergrendelen...")
+        architect_sys = ARCHITECT_PROMPT.format(
+            target=word_count_target, 
+            url=target_url, 
+            client=client_name, 
+            stance=EDITORIAL_STANCE.format(client=client_name)
+        )
+        blueprint = call_ai(f"Plan voor {target_url}", architect_sys)
         
         # FASE 2: WRITING
         sections = re.split(r'##', blueprint)[1:]
         full_raw_content = ""
-        # We verhogen de target per sectie om volume-onderdrukking tegen te gaan
         section_target = int((word_count_target // 4) + 100)
         
         for i, s in enumerate(sections):
             st.write(f"🖋️ Journalist schrijft Hoofdstuk {i+1}...")
-            section_text = call_ai(f"H2 Sectie: {s}", 
-                                    WRITER_PROMPT.format(n=i+1, section_target=section_target, client=client_name, anchor=anchor_text))
+            
+            # Render writer prompt
+            writer_sys = WRITER_PROMPT.format(
+                platform=target_domain,
+                stance=EDITORIAL_STANCE.format(client=client_name),
+                n=i+1,
+                section_target=section_target,
+                anchor=anchor_text
+            )
+            
+            section_text = call_ai(f"H2 Sectie: {s}", writer_sys)
             full_raw_content += f"\n\n## {section_text}"
 
         # FASE 3: ASSEMBLY
-        st.write("✨ Eindredactie (Nuchterheids-check)...")
-        final_article = call_ai(f"Assemblage van:\n{full_raw_content}", 
-                                ASSEMBLER_PROMPT.format(target=word_count_target), temp=0.4)
+        st.write("✨ Eindredactie...")
+        assembler_sys = ASSEMBLER_PROMPT.format(target=word_count_target)
+        final_article = call_ai(f"Assemblage van:\n{full_raw_content}", assembler_sys, temp=0.4)
         
         # FASE 4: PYTHON TECHNICAL LINK INJECTION
-        # Dit is de enige manier om 100% garantie te hebben op de link.
         pattern = re.compile(re.escape(anchor_text), re.IGNORECASE)
         final_article = pattern.sub(f"[{anchor_text}]({target_url})", final_article, count=1)
 
