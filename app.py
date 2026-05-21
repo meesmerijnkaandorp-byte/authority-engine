@@ -2,55 +2,77 @@ import streamlit as st
 from openai import OpenAI
 import time
 import re
+import json
 
-# --- CONFIGURATIE ---
-st.set_page_config(page_title="Authority Engine v18.0 | Commercial Standard", layout="wide")
+# --- PRODUCT CONFIGURATIE ---
+st.set_page_config(
+    page_title="Authority Engine v19.0 | Enterprise Edition", 
+    layout="wide", 
+    initial_sidebar_state="expanded"
+)
 
+# Enterprise API Setup
 try:
     client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
-except Exception as e:
-    st.error("API-sleutel niet geconfigureerd.")
+except Exception:
+    st.error("Kritieke fout: OpenAI API-sleutel niet gevonden in de configuratie.")
 
 def count_words(text):
     return len(text.split())
 
-# --- AGENT 1: THE ARCHITECT (Content Planner) ---
-ARCHITECT_PROMPT = """Jij bent een Content Planner voor een online magazine. 
-Ontwerp een structuur voor een commercieel blogartikel van {target} woorden.
-
-DOEL: 
-- Informeer de lezer over het belang van een goede kledingkast en opbergsystemen.
-- Maak het herkenbaar en praktisch.
-- Plan 4 logische hoofdstukken (H2) die de lezer van het probleem (chaos) naar de oplossing (slim inrichten) leiden.
-- GEEN poëzie, GEEN zweverige metaforen. Gewoon een goed verhaal voor een breed publiek.
+# --- DE REDACTIONELE BIJBEL (De kern van onze kwaliteit) ---
+EDITORIAL_GUIDELINES = """
+- TOON: Nuchter, autoritair, zakelijk-geïnformeerd. Schrijf voor een volwassen publiek (30-60 jaar).
+- VERBODEN WOORDEN: oase, harmonieus, samenspel, ontdekkingsreis, beleving, esthetiek, minimalistisch, 
+  cruciaal, essentieel, wereld van verschil, baken, feniks, horizon, prachtig, uniek, krachtig.
+- STRUCTUUR: Geen opsommingen (bulletpoints) tenzij technisch noodzakelijk. Gebruik lopende, sterke tekst.
+- BENADERING: 'Show, Don't Tell'. Beschrijf situaties (bijv. montage, ruimtegebruik, materiaalgevoel) 
+  in plaats van abstracte voordelen.
 """
 
-# --- AGENT 2: THE WRITER (Professional Copywriter) ---
-WRITER_PROMPT = """Jij bent een ervaren Copywriter. Je schrijft vlotte, informatieve artikelen voor commerciële blogs.
+# --- AGENTEN ---
 
-STIJLREGELS:
-- TOON: Behulpzaam, deskundig en vlot. 
-- GEEN MARKETING-CLICHÉS: Vermijd 'oase', 'essentieel', 'cruciaal', 'samenspel', 'ontdek', 'wereld van verschil'.
-- GEEN POËZIE: Schrijf geen abstracte verhalen over wekkers of exorcisme. Praat over interieur, ruimte en gebruiksgemak.
-- STRUCTUUR: Gebruik normale alinea's.
+# 1. De Strategisch Architect
+ARCHITECT_PROMPT = f"""Jij bent de Lead Content Strategist. Ontwerp een Paragraph Map voor {{target}} woorden.
+URL: {{url}} | KLANT: {{client}} | PLATFORM: {{platform}}
 
-{link_instruction}
+{EDITORIAL_GUIDELINES}
 
-DOEL: Schrijf ongeveer {section_target} woorden voor deze sectie.
+TAAK:
+1. Plan 4 substantiële hoofdstukken (H2).
+2. Elk hoofdstuk moet een specifiek probleem of een specifieke oplossing behandelen die direct linkt naar {{url}}.
+3. Geen algemeenheden. Plan diepgang over materialen, logistiek en dagelijks gebruik.
 """
 
-# --- AGENT 3: THE ASSEMBLER (Eindredacteur) ---
-ASSEMBLER_PROMPT = """Jij bent de eindredacteur. Smeed de teksten aaneen tot een vloeiend artikel van {target} woorden.
+# 2. De Elite Writer
+WRITER_PROMPT = f"""Jij bent een Senior Copywriter met een achtergrond in de journalistiek. 
+Je haat marketing-taal en schrijft uitsluitend teksten die 'echt' aanvoelen.
 
-TAKEN:
-1. Controleer de link: [{anchor}]({url}) mag exact één keer voorkomen.
-2. Verwijder zweverige taal of vreemde metaforen.
-3. Zorg voor een logische opbouw voor een commerciële publisher.
-4. Voeg Metadata toe: Title, Meta Description, Slug.
+{EDITORIAL_GUIDELINES}
+
+JOUW OPDRACHT:
+- Schrijf hoofdstuk {{n}} over {{client}}.
+- DOEL: Schrijf exact {{section_target}} woorden. 
+- EIS: Gebruik GEEN inleidingen of samenvattingen. Begin direct met de inhoud.
+- EIS: Gebruik actieve zinnen. Geen 'wordt gedaan', maar 'je doet'.
+
+{{link_instruction}}
 """
 
-# --- AI FUNCTIE ---
-def call_ai(prompt, system_instruction, temp=0.7):
+# 3. De Humanizer (Eindredacteur)
+ASSEMBLER_PROMPT = f"""Jij bent de Hoofdredacteur. Jouw taak is 'de-robotisering' en technische controle.
+
+{EDITORIAL_GUIDELINES}
+
+TAAK:
+1. Smeed de hoofdstukken aaneen tot een vloeiend geheel van {{target}} woorden.
+2. LINK GUARD: Zorg dat de link [{{anchor}}]({{url}}) EXACT één keer in de tekst staat. Verwijder duplicaten.
+3. SLOP SCAN: Verwijder elke zin die begint met 'Kortom', 'Daarnaast' of 'Het is belangrijk om'.
+4. SEO: Genereer Metadata (Title, Meta Description, Slug) die nieuwswaardig is.
+"""
+
+# --- ENGINE ---
+def call_ai(prompt, system_instruction, temp=0.75):
     response = client.chat.completions.create(
         model="gpt-4o",
         messages=[
@@ -61,52 +83,80 @@ def call_ai(prompt, system_instruction, temp=0.7):
     )
     return response.choices[0].message.content
 
-# --- UI ---
-st.title("🛡️ Authority Engine v18.0")
-st.subheader("Commercial Editorial Style: Geen Slop, Geen Poëzie")
+# --- UI INTERFACE ---
+st.title("🛡️ Authority Engine v19.0")
+st.caption("Industrial Content OS | 2026 Enterprise Standards")
 
 with st.sidebar:
+    st.header("📋 Briefing")
     client_name = st.text_input("Klant", value="VidaXL NL")
-    target_url = st.text_input("URL", value="https://www.vidaxl.nl/g/4063/kledingkasten")
+    target_url = st.text_input("Target URL", value="https://www.vidaxl.nl/g/4063/kledingkasten")
     anchor_text = st.text_input("Ankertekst", value="kledingkast")
-    target_domain = st.text_input("Platform", value="dagelijksestandaard.nl")
-    word_count_target = st.slider("Target Woorden", 600, 1500, 900, step=50)
+    target_domain = st.text_input("Publisher Platform", value="dagelijksestandaard.nl")
     
-    start_btn = st.button("GENEREER ARTIKEL")
+    st.divider()
+    word_count_target = st.slider("Target Woordental", 600, 1800, 950, step=50)
+    
+    start_btn = st.button("RUN PRODUCTION LINE", type="primary")
 
 if start_btn:
-    with st.status("Artikel wordt gegenereerd...", expanded=True) as status:
-        # FASE 1: ARCHITECT
-        blueprint = call_ai(f"Plan voor {client_name} op {target_domain}", 
-                            ARCHITECT_PROMPT.format(target=word_count_target, url=target_url))
+    start_time = time.time()
+    with st.status("🚀 Engine warmt op...", expanded=True) as status:
         
+        # FASE 1: ARCHITECTUUR
+        st.write("📐 Fase 1: Strategische Blueprinting...")
+        blueprint = call_ai(
+            f"Strategie voor {target_url}", 
+            ARCHITECT_PROMPT.format(target=word_count_target, client=client_name, platform=target_domain, url=target_url)
+        )
+        
+        # FASE 2: SEQUENTIAL PRODUCTION
         sections = re.split(r'##', blueprint)[1:]
         full_raw_content = ""
-        section_target = word_count_target // 4
-
-        # FASE 2: WRITING
+        section_target = int((word_count_target * 1.1) // 4)
+        
         for i, s in enumerate(sections):
-            # De link-instructie wordt hier hard in de string gezet
+            # Link instructie: Alleen in sectie 1
             if i == 0:
-                l_inst = f"VERPLICHTE LINK: Verwerk de hyperlink exact zo in de tekst: [{anchor_text}]({target_url})"
+                l_inst = f"TECHNISCH BEVEL: Verwerk de hyperlink exact zo: [{anchor_text}]({target_url})."
             else:
-                l_inst = "Gebruik GEEN hyperlinks in deze sectie."
-
-            st.write(f"Sectie {i+1} schrijven...")
+                l_inst = "GEBRUIK GEEN HYPERLINKS in dit hoofdstuk."
+            
+            st.write(f"🖋️ Fase 2.{i+1}: Schrijven van Hoofdstuk {i+1}...")
             section_text = call_ai(
-                f"Hoofdstuk: {s}",
-                WRITER_PROMPT.format(section_target=section_target, client=client_name, link_instruction=l_inst),
+                f"Sectie Instructie: {s}",
+                WRITER_PROMPT.format(n=i+1, section_target=section_target, client=client_name, link_instruction=l_inst)
             )
             full_raw_content += f"\n\n## {section_text}"
+            time.sleep(0.5)
 
-        # FASE 3: ASSEMBLER
-        st.write("Eindredactie...")
-        final_article = call_ai(f"Eindredactie voor:\n{full_raw_content}", 
-                                ASSEMBLER_PROMPT.format(target=word_count_target, url=target_url, anchor=anchor_text), temp=0.4)
+        # FASE 3: ASSEMBLAGE
+        st.write("✨ Fase 3: Redactionele Opschoning & Link Guard...")
+        final_article = call_ai(
+            f"Smeed aaneen en reinig van AI-slop:\n{full_raw_content}", 
+            ASSEMBLER_PROMPT.format(target=word_count_target, url=target_url, anchor=anchor_text),
+            temp=0.4
+        )
         
-        status.update(label="Artikel voltooid", state="complete")
+        duration = int(time.time() - start_time)
+        status.update(label=f"✅ Productie Voltooid in {duration}s", state="complete")
 
-    # OUTPUT
-    st.metric("Aantal woorden", count_words(final_article))
-    st.markdown(final_article)
-    st.download_button("Download Markdown", final_article, file_name="artikel.md")
+    # --- OUTPUT DISPLAY ---
+    t1, t2 = st.tabs(["💎 Final Asset", "🧬 Raw Intelligence"])
+    
+    with t1:
+        c_final = count_words(final_article)
+        col1, col2, col3 = st.columns(3)
+        col1.metric("Volume", f"{c_final} woorden")
+        col2.metric("Target", f"{word_count_target}")
+        col3.metric("Link Status", "✅ Geplaatst" if f"[{anchor_text}]({target_url})" in final_article else "❌ Mist")
+        
+        st.markdown("---")
+        st.markdown(final_article)
+        st.download_button("Export naar Markdown", final_article, file_name=f"{client_name}_asset.md")
+        
+    with t2:
+        st.subheader("Blueprint")
+        st.write(blueprint)
+        st.subheader("Raw Drafts")
+        st.text_area("Secties", full_raw_content, height=300)
