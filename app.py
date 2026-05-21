@@ -5,17 +5,16 @@ import re
 import json
 
 # --- CONFIGURATIE ---
-st.set_page_config(page_title="Authority Engine v33.1 | Robust Parser", layout="wide")
+st.set_page_config(page_title="Authority Engine v33.2 | Brace Fix", layout="wide")
 
 try:
     client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 except Exception:
-    st.error("Kritieke fout: API-sleutel ontbreekt.")
+    st.error("Kritieke fout: API-sleutel ontbreekt in Secrets.")
 
 # --- ROBUUSTE JSON CLEANER ---
 def clean_json_string(raw_string):
     """Verwijdert AI-gebabbel en markdown blocks rondom JSON."""
-    # Verwijder ```json aan het begin en ``` aan het eind
     clean = re.sub(r'```json\s*|```', '', raw_string)
     return clean.strip()
 
@@ -28,15 +27,15 @@ def validate_output(text, anchor, url, target_words, ban_list):
     }
     return results
 
-# --- PROMPT TEMPLATES ---
+# --- PROMPT TEMPLATES (Met escaped accolades voor JSON) ---
 
 STRATEGIST_SYSTEM = """Jij bent een Content Architect. Je levert UITSLUITEND JSON.
 SCHEMA:
-{
+{{
   "sections": [
-    { "h2": "Titel", "key_points": ["punt 1", "punt 2"], "context": "Waarom dit relevant is voor de publisher" }
+    {{ "h2": "Titel", "key_points": ["punt 1", "punt 2"], "context": "Waarom dit relevant is voor de publisher" }}
   ]
-}"""
+}}"""
 
 WRITER_SYSTEM = """Jij bent een vakjournalist. Schrijf nuchter en feitelijk.
 VERBODEN WOORDEN: {ban_list}"""
@@ -48,12 +47,12 @@ TAAK:
 3. Gebruik de stijl van: {publisher_context}.
 
 JSON SCHEMA:
-{
+{{
   "title": "Strakke kop",
   "meta": "Meta omschrijving",
   "slug": "url-slug",
   "body": "De volledige tekst met [ANCHOR_SPOT] markers..."
-}"""
+}}"""
 
 # --- AI CALL WRAPPER ---
 def call_ai(system, prompt, temp=0.7, json_mode=False):
@@ -72,8 +71,8 @@ def call_ai(system, prompt, temp=0.7, json_mode=False):
         return f"ERROR: {str(e)}"
 
 # --- UI ---
-st.title("🛡️ Authority Engine v33.1")
-st.caption("Robust Parser Edition | Oplossing voor JSON-fouten")
+st.title("🛡️ Authority Engine v33.2")
+st.caption("Brace Fix Edition | JSON & Python Harmony")
 
 with st.sidebar:
     st.header("📋 Briefing")
@@ -92,10 +91,11 @@ if start_btn:
     start_time = time.time()
     ban_list = ["oase", "essentieel", "cruciaal", "wereld van verschil"]
 
-    with st.status("🏗️ Productie (v33.1 Stable Mode)...", expanded=True) as status:
+    with st.status("🏗️ Productie in uitvoering...", expanded=True) as status:
         
         # 1. STRATEGIST
         st.write("📐 Blueprint genereren...")
+        # De strategist prompt heeft geen format nodig voor variabelen, dus we laten hem zo.
         strat_raw = call_ai(STRATEGIST_SYSTEM, f"Target: {word_count_target}w voor {target_url}", json_mode=True)
         try:
             blueprint = json.loads(clean_json_string(strat_raw))["sections"]
@@ -116,6 +116,7 @@ if start_btn:
 
         # 3. EDITOR
         st.write("✨ Eindredactie & JSON-assemblage...")
+        # Hier gebeurde de KeyError. Nu gefixt met dubbele accolades in de constante.
         editor_sys = EDITOR_SYSTEM.format(anchor=anchor_text, publisher_context=publisher_info)
         editor_raw = call_ai(editor_sys, f"Smeed aaneen:\n{full_draft}", json_mode=True)
         
@@ -128,7 +129,7 @@ if start_btn:
             final_data["body"] = body
         except Exception as e:
             st.error(f"Editor Parsing Fout: {e}")
-            st.subheader("Raw Output voor debug:")
+            st.subheader("Raw Output voor debug (check op ongeclosede quotes):")
             st.code(editor_raw)
             st.stop()
 
