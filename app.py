@@ -3,78 +3,75 @@ from openai import OpenAI
 import time
 
 # --- PRODUCT CONFIGURATIE ---
-st.set_page_config(page_title="Proprietary Content OS v2.0", layout="wide")
+st.set_page_config(page_title="Authority Engine v3.0 | Human-Grade", layout="wide")
 
-# Beveiliging & API
 try:
     client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 except Exception as e:
-    st.error("Kritieke fout: API-sleutel niet geconfigureerd in Streamlit Secrets.")
+    st.error("Kritieke fout: API-sleutel ontbreekt.")
 
 def count_words(text):
     return len(text.split())
 
-# --- PROMPT 1: THE ARCHITECT (Outline & Research) ---
-ARCHITECT_PROMPT = """Jij bent de Lead Content Strategist. Jouw taak is om een diepgaande, journalistieke outline te maken voor een artikel van {target} woorden.
-Je moet het onderwerp opdelen in 4 substantiële hoofdstukken (H2). 
-Elk hoofdstuk moet een specifieke invalshoek hebben die de diepgang garandeert. 
-Stuur alleen de outline terug (H1 en de H2's met korte beschrijving per H2)."""
+# --- FASE 1: DE ARCHITECT (Gedetailleerde Bouwtekening) ---
+ARCHITECT_PROMPT = """Jij bent de Hoofdredacteur van een kwaliteitsmagazine. 
+Jouw taak is om een artikel-structuur uit te zetten voor een tekst van {target} woorden.
+ONDERWERP: {subject}
+KLANT: {client}
+PLATFORM: {platform}
 
-# --- PROMPT 2: THE ELITE WRITER (Section Focused) ---
-WRITER_PROMPT = """Jij bent een Senior Essayist voor bladen als 'Atlantic' of 'Wired'. 
-Jouw schrijfstijl is grillig, menselijk, diepgaand en vrij van AI-clichés.
-
-JOUW OPDRACHT:
-Schrijf alleen de tekst voor de specifieke sectie die je wordt toegewezen. 
-DOEL: Schrijf minimaal {section_target} woorden voor DEZE sectie alleen. 
-STIJLREGELS:
-- Gebruik complexe zinsstructuren en varieer met korte, krachtige statements.
-- Gebruik GEEN marketing-jargon ('ontdek', 'uniek', 'oplossing').
-- Gebruik 'low-frequency' woorden en weef de ankertekst organisch in het betoog.
-- Focus op de 'waarom' en 'hoe', niet alleen de 'wat'.
-- Geen sub-headers (H3) tenzij absoluut noodzakelijk voor technische complexiteit.
+EISEN:
+1. Maak exact 4 hoofdstukken (H2).
+2. Per hoofdstuk geef je 3 'Diepgang-punten' die de schrijver MOET uitwerken.
+3. De insteek moet menselijk en observerend zijn (denk aan 'zaterdagmorgen-energie').
+4. ALLES IN HET NEDERLANDS. Geen Engelse termen in de titels.
 """
 
-# --- PROMPT 3: THE POLISHER (Assembly & Narrative Flow) ---
-POLISHER_PROMPT = """Jij bent een Eindredacteur. Je krijgt een artikel dat in delen is geschreven. 
-Jouw taak is om de 'narratieve lijm' aan te brengen. 
-- Zorg voor soepele overgangen tussen de alinea's en hoofdstukken.
-- Verwijder eventuele herhalingen die zijn ontstaan door het stapsgewijs schrijven.
-- Voeg SEO Metadata (Title, Meta, Slug) toe aan de top van het document.
-- Zorg dat de tone-of-voice consistent, autoritair en intellectueel uitdagend is over het hele stuk.
+# --- FASE 2: DE ELITE WRITER (Sectie-voor-Sectie) ---
+WRITER_PROMPT = """Jij bent een freelance journalist voor bladen als Linda.man of Quote. 
+Jouw stijl is observerend, menselijk en wars van marketing-clichés. 
+
+GEBRUIK DE 'SHOW, DON'T TELL' METHODE:
+- Schrijf niet: "Het is efficiënt." 
+- Schrijf: "Alles past in één keer achter de deuren van de laadruimte, zonder dat je drie keer op en neer hoeft te rijden."
+
+STRICTE EISEN:
+1. TAAL: Uitsluitend Nederlands. Gebruik GEEN Engelse leenwoorden of constructies zoals 'de beginnings'.
+2. LENGTE: Schrijf voor deze specifieke sectie minimaal {section_target} woorden.
+3. FLOW: Begin direct met de inhoud. Geen introducties zoals "In deze sectie gaan we kijken naar...".
+4. BRANDING: De klant ({client}) en de links ({link1}, {link2}) moeten aanvoelen als gereedschap voor de lezer, niet als een advertentie.
 """
 
-# --- PROMPT 4: THE TYRANT AUDITOR (Final Quality Gate) ---
-AUDITOR_PROMPT = """Jij bent de meest gevreesde Editor-in-Chief. Je haat AI-slop en oppervlakkigheid.
-JOUW TAKEN:
-1. WOORDEN-CHECK: Is het artikel substantieel en voldoet het aan het doel?
-2. AI-VINGERAFDRUK: Scan op voorspelbare patronen en vervang ze door scherpere journalistiek.
-3. E-E-A-T: Straalt deze tekst uit dat het geschreven is door een mens met 20 jaar ervaring?
-Geef een score en finale verbeterpunten."""
+# --- FASE 3: DE POLISHER (Narratieve Lijm) ---
+POLISHER_PROMPT = """Jij bent een meester-redacteur. Je krijgt 4 losse hoofdstukken. 
+Smeed ze aaneen tot één vloeiend essay van topniveau.
+- Verwijder dubbelingen.
+- Zorg dat de overgangen tussen hoofdstukken natuurlijk voelen.
+- Voeg SEO-metadata (Title, Meta, Slug) toe aan de top.
+- Controleer op 'AI-isme' (woorden als 'daarnaast', 'bovendien', 'cruciaal') en vervang ze door menselijke taal.
+"""
 
 # --- ENGINE FUNCTIE ---
-def call_ai(prompt, system_instruction, model="gpt-4o"):
+def call_ai(prompt, system_instruction):
     response = client.chat.completions.create(
-        model=model,
+        model="gpt-4o",
         messages=[
             {"role": "system", "content": system_instruction},
             {"role": "user", "content": prompt}
         ],
-        temperature=0.85
+        temperature=0.8
     )
     return response.choices[0].message.content
 
-# --- UI INTERFACE ---
-st.title("🛡️ Proprietary Content OS v2.0")
-st.subheader("Sequential Authority Architecture")
+# --- UI ---
+st.title("🛡️ Authority Engine v3.0")
+st.subheader("Human-Centric Content Pipeline")
 
 with st.sidebar:
-    st.header("📋 Briefing")
-    client_name = st.text_input("Klant", "Bijv. Managed Hosting Pro")
-    target_domain = st.text_input("Platform", "Bijv. techcrunch.com")
-    
-    st.divider()
-    word_count_target = st.slider("Target Woorden", 600, 2000, 1000, step=100)
+    st.header("Briefing")
+    client_name = st.text_input("Klant", value="Avis")
+    target_domain = st.text_input("Platform", value="Lifestyle Blog")
+    word_count_target = st.slider("Target Woorden", 600, 1500, 900, step=100)
     
     st.divider()
     link_1 = st.text_input("URL 1")
@@ -82,52 +79,43 @@ with st.sidebar:
     link_2 = st.text_input("URL 2 (Optioneel)")
     anchor_2 = st.text_input("Anchor 2")
     
-    subject = st.text_area("Insteek", placeholder="Optioneel: Geef specifieke hoek aan...")
-    
-    start_btn = st.button("START PRODUCTION PIPELINE", type="primary")
+    subject = st.text_area("Insteek", value="De psychologie van verhuizen en de drang naar een frisse start.")
+    start_btn = st.button("GENEREER MEESTERWERK", type="primary")
 
 if start_btn:
-    if not client_name or not target_domain or not link_1:
-        st.error("Kritieke data ontbreekt in de briefing.")
-    else:
-        # FASE 1: DE ARCHITECT
-        with st.status("🏗️ Fase 1: Architectuur ontwerpen...", expanded=True) as status:
-            outline = call_ai(f"Onderwerp: {subject if subject else 'Autoriteit artikel'}. Klant: {client_name}. Platform: {target_domain}. Doel: {word_count_target} woorden.", ARCHITECT_PROMPT)
-            st.write("Outline gegenereerd.")
-            
-            # FASE 2: DE WRITER (SERIAL GENERATION)
-            sections = outline.split("##")[1:] # Haal de H2's eruit
-            full_draft = ""
-            section_target = (word_count_target // len(sections)) + 100 # Ruime marge per sectie
-            
-            for i, section in enumerate(sections):
-                st.write(f"🖋️ Fase 2.{i+1}: Hoofdstuk {i+1} schrijven ({section_target} woorden)...")
-                section_content = call_ai(f"Schrijf dit hoofdstuk voor {target_domain} over {client_name}. Sectie details: {section}. Gebruik links: {link_1} ({anchor_1}) en {link_2} ({anchor_2}) indien passend.", WRITER_PROMPT.format(section_target=section_target))
-                full_draft += f"\n\n## {section_content}"
-                time.sleep(1) # Rate limit protectie
-            
-            # FASE 3: ASSEMBLY & POLISH
-            status.update(label="✨ Fase 3: Assemblage & Narratieve Flow...", state="running")
-            final_article = call_ai(f"Klant: {client_name}. Platform: {target_domain}. Hier is de ruwe tekst van alle secties:\n\n{full_draft}", POLISHER_PROMPT)
-            
-            # FASE 4: FINAL AUDIT
-            status.update(label="🧐 Fase 4: Finale Kwaliteitscontrole...", state="running")
-            audit_report = call_ai(f"Target: {word_count_target} woorden. Tekst:\n\n{final_article}", AUDITOR_PROMPT)
-            
-            status.update(label="✅ Productie Voltooid", state="complete")
-
-        # --- OUTPUT ---
-        t1, t2, t3 = st.tabs(["💎 Final Asset", "🔍 Audit Rapport", "🧬 Blueprint"])
+    with st.status("🚀 Productie gestart...", expanded=True) as status:
+        # STAP 1: ARCHITECTUUR
+        st.write("📐 Architect ontwerpt de diepgang...")
+        blueprint = call_ai(f"Insteek: {subject}", ARCHITECT_PROMPT.format(target=word_count_target, subject=subject, client=client_name, platform=target_domain))
         
-        with t1:
-            c_final = count_words(final_article)
-            st.metric("Final Word Count", f"{c_final} woorden", delta=int(c_final - word_count_target))
-            st.markdown(final_article)
-            st.download_button("Export voor CMS", final_article, file_name=f"{client_name}_final.md")
-            
-        with t2:
-            st.markdown(audit_report)
-            
-        with t3:
-            st.markdown(outline)
-            st.text_area("Rauwe Secties", full_draft, height=300)
+        # STAP 2: SECTIE SCHRIJVEN
+        st.write("🖋️ Elite Writer start de hoofdstukken...")
+        h2_sections = blueprint.split("##")[1:]
+        full_content = ""
+        section_target = (word_count_target // 4) + 50 # Forceer over-lengte
+        
+        for i, s in enumerate(h2_sections):
+            st.write(f"  - Schrijven hoofdstuk {i+1}...")
+            section_text = call_ai(
+                f"Sectie Instructie: {s}\nLinks: {link_1} ({anchor_1}), {link_2} ({anchor_2})",
+                WRITER_PROMPT.format(section_target=section_target, client=client_name, link1=link_1, link2=link_2)
+            )
+            full_content += f"\n\n## {section_text}"
+            time.sleep(0.5)
+
+        # STAP 3: POLISH
+        st.write("✨ Eindredactie smeedt het verhaal aaneen...")
+        final_article = call_ai(f"Hier is de ruwe content:\n{full_content}", POLISHER_PROMPT)
+        
+        status.update(label="✅ Content klaar voor publicatie", state="complete")
+
+    # OUTPUT
+    final_count = count_words(final_article)
+    st.metric("Eindresultaat", f"{final_count} woorden", delta=int(final_count - word_count_target))
+    
+    tab1, tab2 = st.tabs(["📄 Final Asset", "🧬 Blueprint"])
+    with tab1:
+        st.markdown(final_article)
+        st.download_button("Download Markdown", final_article, file_name="artikel.md")
+    with tab2:
+        st.markdown(blueprint)
