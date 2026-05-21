@@ -2,59 +2,59 @@ import streamlit as st
 from openai import OpenAI
 import time
 import re
-import json
 
 # --- CONFIGURATIE ---
-st.set_page_config(page_title="Authority Engine v22.1 | Scope Fix", layout="wide")
+st.set_page_config(page_title="Authority Engine v23.0 | Lifestyle Narrative", layout="wide")
 
 try:
     client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 except Exception:
-    st.error("API-sleutel niet gevonden in Secrets.")
+    st.error("API-sleutel niet gevonden.")
 
 def count_words(text):
     return len(text.split())
 
-# --- REDACTIONELE RICHTLIJNEN (Statische strings zonder f-prefix om NameErrors te voorkomen) ---
-EDITORIAL_STANCE = """
-- STIJL: Lifestyle-journalistiek (Denk aan: Kassa, Radar, of de weekendbijlage van een krant). 
-- TOON: Direct, nuchter, adviserend zonder 'vriendelijk' te zijn. 
-- GEEN POËZIE: Geen metaforen over dansende kasten of stomme reuzen. 
-- FOCUS: De logistiek van het wonen. De keuze voor materialen. De prijs-kwaliteitverhouding van {client}.
-- VERBODEN: oase, harmonie, samenspel, ontdek, essentieel, cruciaal, wereld van verschil, baken, feniks, horizon, prachtig, uniek, krachtig, beleving, partner, de tand des tijds.
+# --- DE NIEUWE BENCHMARK (Jouw goedgekeurde tekst als referentie) ---
+LIFESTYLE_BENCHMARK = """
+"In een wereld waarin alles sneller lijkt te gaan, groeit de behoefte aan rust. Werk stapelt zich op, agenda’s lopen over... Je huis fungeert als tegenwicht voor de drukte buiten. Een opgeruimde omgeving helpt om je hoofd leeg te maken."
 """
 
-ARCHITECT_PROMPT = """Jij bent een Content Director. Ontwerp een essay-structuur voor {target} woorden over {url}.
-{stance}
+# --- AGENT PROMPTS ---
 
-STRICTE OPDRACHT:
-1. Plan 4 H2-hoofdstukken over: 
-   - De frustratie van ruimtegebrek in de Randstad/gemiddeld huis.
-   - De technische keuze: schuifdeur vs. draaideur (praktische logica).
-   - Materiaalkennis: MDF, spaanplaat, massief hout. Wat koop je voor welk budget?
-   - Logistiek: Van bestelling bij {client} naar een gemonteerde kast.
+ARCHITECT_PROMPT = f"""Jij bent een Hoofdredacteur van een lifestyle magazine. 
+Ontwerp een essay-structuur voor {{target}} woorden. 
+
+REFERENTIE: Gebruik dit als de absolute standaard voor toon en diepgang:
+{LIFESTYLE_BENCHMARK}
+
+STRICTE RICHTLIJNEN:
+1. GEEN PRODUCTGEGEVENS: Praat NOOIT over afmetingen (cm), prijzen (euro's) of montagetips.
+2. THEMA: Focus op de psychologie van wonen. Waarom geeft orde rust? Hoe beïnvloedt je slaapkamer je mindset?
+3. ROL VAN KLANT: Noem {{client}} alleen als facilitator van deze rust.
+4. STRUCTUUR: Plan 4 beschouwende hoofdstukken (H2) die een verhaal vertellen, geen gids.
 """
 
-WRITER_PROMPT = """Jij bent een nuchtere consumentenjournalist. Je schrijft voor {platform}.
+WRITER_PROMPT = f"""Jij bent een essayist. Je schrijft reflectieve teksten over modern leven en wonen.
 
-{stance}
+STIJLREGELS:
+- TOON: Kalm, volwassen, invoelend. Geen marketing-enthousiasme.
+- VERBODEN: 'oase', 'essentieel', 'cruciaal', 'samenspel', 'ontdek', 'wereld van verschil', 'bij het aanschaffen van', 'afmetingen', 'prijs-kwaliteit'.
+- METHODE: Schrijf over emoties en mentale ruimte. 
+- ZINSBOUW: Varieer in lengte. Gebruik korte zinnen voor nadruk.
 
-JOUW OPDRACHT:
-- Schrijf hoofdstuk {n}. 
-- Gebruik concrete details: afmetingen, schroeven, inbussleutels, het gewicht van een jas, de vierkante meterprijs van een slaapkamer.
-- EIS: Schrijf minimaal {section_target} woorden. Gebruik GEEN inleidingen.
-- ANKER-CHECK: Gebruik het woord '{anchor}' minimaal 2 keer in deze tekst.
+DOEL: Schrijf minimaal {{section_target}} woorden voor deze sectie.
 """
 
-ASSEMBLER_PROMPT = """Jij bent de Hoofdredacteur. 
-1. Verwijder elke zin die te 'mooi' of 'literair' is. Maak het nuchter.
-2. Zorg dat de overgangen tussen de hoofdstukken zakelijk zijn.
-3. Check het volume: we mikken op {target} woorden.
-4. Genereer Metadata: Title (direct), Meta (informatief), Slug.
+ASSEMBLER_PROMPT = """Jij bent de eindredacteur. Smeed de teksten aaneen tot een vloeiend essay van {target} woorden.
+
+TAKEN:
+1. VERWIJDER PRODUCT-SLOP: Als je leest over 'betaalbare opties' of 'montage', verwijder het.
+2. FLOW: Zorg dat het artikel leest als een opiniestuk of een diepgaand blog.
+3. SEO: Genereer Metadata (Title, Meta Description, Slug) die aansluit bij lifestyle en rust.
 """
 
 # --- AI ENGINE ---
-def call_ai(prompt, system_instruction, temp=0.75):
+def call_ai(prompt, system_instruction, temp=0.7):
     response = client.chat.completions.create(
         model="gpt-4o",
         messages=[
@@ -66,32 +66,25 @@ def call_ai(prompt, system_instruction, temp=0.75):
     return response.choices[0].message.content
 
 # --- UI ---
-st.title("🛡️ Authority Engine v22.1")
-st.subheader("Commercial Editorial Standard | Stability Update")
+st.title("🛡️ Authority Engine v23.0")
+st.subheader("Lifestyle Narrative Engine | Psychology over Product")
 
 with st.sidebar:
     st.header("📋 Briefing")
-    client_name = st.text_input("Klant", value="VidaXL NL")
-    target_url = st.text_input("Target URL", value="https://www.vidaxl.nl/g/4063/kledingkasten")
-    anchor_text = st.text_input("Ankertekst", value="kledingkast")
-    target_domain = st.text_input("Platform", value="dagelijksestandaard.nl")
-    word_count_target = st.slider("Target Woorden", 600, 1500, 950, step=50)
+    client_name = st.text_input("Klant", value="VidaXL")
+    target_url = st.text_input("URL", value="https://www.vidaxl.nl/g/4063/kledingkasten")
+    anchor_text = st.text_input("Anker", value="kledingkast")
+    word_count_target = st.slider("Target", 600, 1500, 900, step=50)
     
-    start_btn = st.button("PRODUCEER ASSET", type="primary")
+    start_btn = st.button("GENEREER LIFESTYLE ESSAY")
 
 if start_btn:
     start_time = time.time()
-    with st.status("🏗️ Productie in uitvoering...", expanded=True) as status:
+    with st.status("🏗️ Essay wordt geweven...", expanded=True) as status:
         
-        # FASE 1: ARCHITECT (Render prompt met variabelen)
-        st.write("📐 Architectuur vergrendelen...")
-        architect_sys = ARCHITECT_PROMPT.format(
-            target=word_count_target, 
-            url=target_url, 
-            client=client_name, 
-            stance=EDITORIAL_STANCE.format(client=client_name)
-        )
-        blueprint = call_ai(f"Plan voor {target_url}", architect_sys)
+        # FASE 1: ARCHITECT
+        blueprint = call_ai(f"Essay voor {target_url}", 
+                            ARCHITECT_PROMPT.format(target=word_count_target, url=target_url, client=client_name))
         
         # FASE 2: WRITING
         sections = re.split(r'##', blueprint)[1:]
@@ -99,33 +92,23 @@ if start_btn:
         section_target = int((word_count_target // 4) + 100)
         
         for i, s in enumerate(sections):
-            st.write(f"🖋️ Journalist schrijft Hoofdstuk {i+1}...")
-            
-            # Render writer prompt
-            writer_sys = WRITER_PROMPT.format(
-                platform=target_domain,
-                stance=EDITORIAL_STANCE.format(client=client_name),
-                n=i+1,
-                section_target=section_target,
-                anchor=anchor_text
-            )
-            
-            section_text = call_ai(f"H2 Sectie: {s}", writer_sys)
+            st.write(f"🖋️ Essayist schrijft hoofdstuk {i+1}...")
+            section_text = call_ai(f"Sectie: {s}", WRITER_PROMPT.format(section_target=section_target, client=client_name))
             full_raw_content += f"\n\n## {section_text}"
 
         # FASE 3: ASSEMBLY
-        st.write("✨ Eindredactie...")
-        assembler_sys = ASSEMBLER_PROMPT.format(target=word_count_target)
-        final_article = call_ai(f"Assemblage van:\n{full_raw_content}", assembler_sys, temp=0.4)
+        st.write("✨ Redactie op flow en toon...")
+        final_article = call_ai(f"Assemblage:\n{full_raw_content}", ASSEMBLER_PROMPT.format(target=word_count_target), temp=0.4)
         
-        # FASE 4: PYTHON TECHNICAL LINK INJECTION
+        # FASE 4: PYTHON LINK INJECTION
+        # We zoeken de eerste keer dat de ankertekst voorkomt (meestal rond 30-50% van de tekst)
+        # Voor lifestyle doen we het niet in de eerste alinea om de 'vibe' niet te breken.
         pattern = re.compile(re.escape(anchor_text), re.IGNORECASE)
         final_article = pattern.sub(f"[{anchor_text}]({target_url})", final_article, count=1)
 
-        status.update(label=f"✅ Gereed in {int(time.time() - start_time)}s", state="complete")
+        status.update(label=f"✅ Essay gereed in {int(time.time() - start_time)}s", state="complete")
 
-    # --- OUTPUT ---
-    c_final = count_words(final_article)
-    st.metric("Volume", f"{c_final} woorden", delta=int(c_final - word_count_target))
+    # OUTPUT
+    st.metric("Volume", count_words(final_article))
     st.markdown(final_article)
-    st.download_button("Download", final_article, file_name="asset.md")
+    st.download_button("Download", final_article, file_name="lifestyle_asset.md")
