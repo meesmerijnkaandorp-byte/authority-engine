@@ -5,70 +5,68 @@ import re
 import json
 
 # --- PRODUCT CONFIGURATIE ---
-st.set_page_config(page_title="Authority Engine v6.0 | Industrial Grade", layout="wide")
+st.set_page_config(page_title="Authority Engine v7.0 | THE ENFORCER", layout="wide")
 
 try:
     client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 except Exception as e:
-    st.error("Kritieke fout: API-sleutel ontbreekt in Streamlit Secrets.")
+    st.error("Kritieke fout: API-sleutel ontbreekt.")
 
 def count_words(text):
     return len(text.split())
 
-# --- AGENT 1: THE ARCHITECT (De Strategische Blauwdruk) ---
-ARCHITECT_PROMPT = """Jij bent de Lead Strategist bij een top-mediahuis. Jouw taak is het ontwerpen van een 'Paragraph Map' voor een diepgaand essay van {target} woorden.
+# --- AGENT 1: THE ARCHITECT (Topic & Context Lock) ---
+ARCHITECT_PROMPT = """Jij bent de Lead Strategist. Ontwerp een Paragraph Map voor een essay van {target} woorden.
+ONDERWERP/URL: {url}
+KLANT: {client}
+ANKERTEKST: {anchor}
 
-JOUW OPDRACHT:
-1. Verdeel het onderwerp in exact 4 grote H2-secties.
-2. Definieer per H2-sectie 4 specifieke, feitelijke sub-onderwerpen of scènes.
-3. Verbied abstracties; dwing de schrijver tot concrete details (bijv. niet 'service', maar 'de monteur die om 07:00 op de stoep staat').
-4. GEEN ENGELS. Gebruik uitsluitend rijk Nederlands.
-5. Focus 100% op de materie van de klant ({client}) en de zoekintentie van het platform ({platform}).
+STRICTE EISEN:
+1. FOCUS: Het artikel mag NIET gaan over de geschiedenis van het bedrijf. Het MOET gaan over het product in de URL ({url}) en de menselijke behoefte eromheen.
+2. STRUCTUUR: Maak exact 5 grote H2-hoofdstukken.
+3. DIEPGANG: Definieer per H2-sectie 5 specifieke, rauwe, alledaagse scènes of technische details.
+4. ANKER: Bepaal in welke 2 hoofdstukken de ankertekst '{anchor}' verplicht op een cruciale plek moet staan.
+5. TAAL: Nederlands. Geen marketing-clichés.
 """
 
-# --- AGENT 2: THE TITAN WRITER (De Harde Journalist) ---
-WRITER_PROMPT = """Jij bent een bekroonde onderzoeksjournalist. Je haat 'content' en schrijft uitsluitend 'meesterwerken'.
+# --- AGENT 2: THE TITAN WRITER (Anti-Cliché & Volume) ---
+WRITER_PROMPT = """Jij bent een bekroonde journalist (denk aan Joris Luyendijk). Je schrijft feitelijk, scherp en met 'modder aan de schoenen'.
 
-JOUW IDENTITEIT & STIJL:
-- Je bent een meester in 'Show, Don't Tell'. Beschrijf de realiteit: de geur, het gewicht, de frustratie, de oplossing.
-- Je taalgebruik is 100% Nederlands. Vermijd Engelse constructies of letterlijke vertalingen (NOOIT 'de beginnings', 'aan de slag gaan', of 'het draait allemaal om').
-- Je varieert je zinslengte: korte, mokerslag-zinnen afgewisseld met diepe, intellectuele observaties.
-- Je gebruikt 'low-frequency' woorden: woorden die diepgang verraden (bijv. 'steevast', 'ontegenzeggelijk', 'ambiguïteit', 'saillant').
+JOUW STIJL:
+- GEEN METAFOREN: Verboden zijn: 'baken', 'feniks', 'horizon', 'geoliede machine', 'paradigmaverschuiving', 'in de wereld van', 'navigeren'.
+- CONCREET: Gebruik zelfstandige naamwoorden. Praat over scharnieren, planken, de geur van spaanplaat, de chaos van rondslingerende kleding.
+- LENGTE: Schrijf voor deze sectie minimaal {section_target} woorden. Gebruik GEEN herhalingen. Voeg nieuwe casuïstiek toe.
 
-STRICTE OPDRACHT:
-1. Schrijf de volledige tekst voor de toegewezen H2-sectie.
-2. EIS: Schrijf minimaal {section_target} woorden. Gebruik geen herhalingen, maar voeg nieuwe feiten en perspectieven toe.
-3. SCHRIJF NOOIT OVER HET SCHRIJVEN. Geen meta-teksten over 'verbinding' of 'ritme'. Praat alleen over het onderwerp.
-4. BRANDING: Verwerk de klant ({client}) en de link ({link1}) als essentieel onderdeel van het betoog.
+STRICT:
+- Gebruik de ankertekst '{anchor}' op een natuurlijke, onzichtbare manier in de lopende tekst.
+- Praat NOOIT over het proces van schrijven.
 """
 
-# --- AGENT 3: THE ASSEMBLER (De Technisch Eindredacteur) ---
-ASSEMBLER_PROMPT = """Jij bent een Technisch Eindredacteur. Je krijgt 4 hoofdstukken van een groot essay.
-JOUW OPDRACHT:
-1. Smeed de hoofdstukken aaneen met natuurlijke overgangszinnen.
-2. VERWIJDER NIETS. Je bent hier om volume te bewaken en flow toe te voegen.
-3. Verwijder elke zin die praat over 'de kunst van het schrijven' of 'deze tekst'.
-4. Schrap AI-clichés: 'kortom', 'daarnaast', 'in deze wereld', 'bovendien'.
-5. Voeg bovenaan SEO-metadata toe: Title Tag (max 60), Meta Description (max 155), URL Slug.
+# --- AGENT 3: THE ASSEMBLER (Flow & Guard) ---
+ASSEMBLER_PROMPT = """Jij bent de Eindredacteur. Smeed 5 hoofdstukken aaneen tot één meesterwerk.
+1. VERWIJDER NIETS. Behoud alle details en het volume.
+2. SCAN & DELETE: Verwijder elke zin die klinkt als een samenvatting of een cliché-conclusie.
+3. CHECK ANKER: Zorg dat de ankertekst '{anchor}' behouden blijft.
+4. Metadata: Voeg Title, Meta en Slug toe (geen poëzie, gewoon harde SEO).
 """
 
-# --- AGENT 4: THE GATEKEEPER (De Onverbiddelijke Scorer) ---
-SCORER_PROMPT = """Jij bent een algoritme dat content beoordeelt op menselijkheid en autoriteit.
-CRITERIA:
-1. TOPIC FOCUS: Gaat de tekst over de klant en het onderwerp? (100% vereist).
-2. LENGTE: Wordt de {target} woorden gehaald?
-3. TAAL: Is het rijk Nederlands zonder Engelse invloeden?
-4. GEEN META: Praat de tekst over zichzelf of over 'schrijven'? (Indien ja: Score = 0).
+# --- AGENT 4: THE GATEKEEPER (The Executioner) ---
+SCORER_PROMPT = """Jij bent een cynische criticus. Beoordeel de tekst op target {target}.
+KEUR AF (Score < 10) ALS:
+1. De ankertekst '{anchor}' ontbreekt.
+2. De tekst een geschiedenisles is over de klant in plaats van een artikel over het product.
+3. Er woorden in staan zoals 'feniks', 'baken' of 'onstuimig'.
+4. Het woordenaantal onder de {target} ligt.
 
-STRICTE OUTPUT IN JSON:
+JSON OUTPUT:
 {{
     "score": 88,
-    "reasoning": "Kritische analyse van de tekst.",
-    "improvements": "3 harde actiepunten."
+    "reasoning": "Wees brutaal eerlijk.",
+    "improvements": "Wat moet er concreet bij?"
 }}
 """
 
-# --- AI ENGINE ---
+# --- ENGINE ---
 def call_ai(prompt, system_instruction, temp=0.8, response_format=None):
     args = {
         "model": "gpt-4o",
@@ -80,97 +78,76 @@ def call_ai(prompt, system_instruction, temp=0.8, response_format=None):
     }
     if response_format:
         args["response_format"] = response_format
-        
     response = client.chat.completions.create(**args)
     return response.choices[0].message.content
 
-# --- UI INTERFACE ---
-st.title("🛡️ Authority Engine v6.0")
-st.subheader("Industrial Content Production: Zero-Hallucination Pipeline")
+# --- UI ---
+st.title("🛡️ Authority Engine v7.0")
+st.subheader("The Enforcer: Zero-Cliché & Context-Locked Pipeline")
 
 with st.sidebar:
     st.header("📋 Briefing")
     client_name = st.text_input("Klant", value="VidaXL")
+    target_url = st.text_input("Doel URL", value="https://www.vidaxl.nl/g/4063/kledingkasten")
+    anchor_text = st.text_input("Ankertekst", value="kledingkast")
     target_domain = st.text_input("Platform", value="dagelijksestandaard.nl")
-    word_count_target = st.slider("Target Woorden", 600, 2000, 900, step=100)
+    word_count_target = st.slider("Target Woorden", 600, 2000, 1400, step=100)
     
-    st.divider()
-    link_1 = st.text_input("URL 1")
-    anchor_1 = st.text_input("Anchor 1")
-    link_2 = st.text_input("URL 2 (Optioneel)")
-    anchor_2 = st.text_input("Anchor 2")
-    
-    subject = st.text_area("Insteek", value="Waarom een goed georganiseerd huis essentieel is voor je mentale rust.")
-    start_btn = st.button("START PRODUCTIE", type="primary")
+    subject = st.text_area("Optionele Insteek", value="")
+    start_btn = st.button("RUN ENFORCER PIPELINE", type="primary")
 
 if start_btn:
-    if not client_name or not target_domain or not link_1:
-        st.error("Briefing onvolledig. Controleer Klant, Platform en URL.")
-    else:
-        with st.status("🏗️ Industrial Pipeline actief...", expanded=True) as status:
-            # FASE 1: ARCHITECT
-            st.write("📐 Fase 1: Architectuur ontwerpen (Paragraph Map)...")
-            blueprint = call_ai(
-                f"Onderwerp: {subject}", 
-                ARCHITECT_PROMPT.format(target=word_count_target, client=client_name, platform=target_domain), 
-                temp=0.7
+    with st.status("🚀 Enforcer Mode Actief...", expanded=True) as status:
+        # FASE 1
+        st.write("📐 Architect vergrendelt context op URL...")
+        blueprint = call_ai(f"Briefing: {subject}. URL: {target_url}", ARCHITECT_PROMPT.format(target=word_count_target, client=client_name, platform=target_domain, url=target_url, anchor=anchor_text), temp=0.7)
+        
+        # FASE 2
+        h2_sections = re.split(r'##', blueprint)[1:]
+        full_raw_content = ""
+        section_target = (word_count_target // 5) + 100 
+        
+        for i, s in enumerate(h2_sections):
+            st.write(f"🖋️ Titan Writer dwingt volume in Hoofdstuk {i+1}...")
+            section_text = call_ai(
+                f"Sectie: {s}\nAnkertekst VERPLICHT: {anchor_text}",
+                WRITER_PROMPT.format(section_target=section_target, client=client_name, anchor=anchor_text),
+                temp=0.85
             )
-            
-            # FASE 2: SEQUENTIAL PRODUCTION
-            h2_sections = re.split(r'##', blueprint)[1:]
-            full_raw_content = ""
-            # We mikken op 25% van target + 125 woorden buffer om luiheid te compenseren
-            section_target = (word_count_target // 4) + 125 
-            
-            for i, s in enumerate(h2_sections):
-                st.write(f"🖋️ Fase 2.{i+1}: Writer produceert Hoofdstuk {i+1} ({section_target}+ woorden)...")
-                section_text = call_ai(
-                    f"Sectie-instructies: {s}\nAnkertekst: {anchor_1}\nURL: {link_1}\nLink 2: {link_2} ({anchor_2})",
-                    WRITER_PROMPT.format(section_target=section_target, client=client_name, link1=link_1),
-                    temp=0.85
-                )
-                full_raw_content += f"\n\n## {section_text}"
-                time.sleep(1)
+            full_raw_content += f"\n\n## {section_text}"
+            time.sleep(1)
 
-            # FASE 3: ASSEMBLER
-            st.write("✨ Fase 3: Assemblage & Narratieve Flow...")
-            final_article = call_ai(f"Smeed dit aaneen tot één essay over {subject} voor {target_domain}. Rauwe tekst:\n{full_raw_content}", ASSEMBLER_PROMPT, temp=0.7)
-            
-            # FASE 4: GATEKEEPER
-            st.write("🧐 Fase 4: Kwaliteitscontrole (Score-Gate)...")
-            score_raw = call_ai(
-                f"Beoordeel deze tekst op basis van doel {word_count_target}:\n\n{final_article}", 
-                SCORER_PROMPT.format(target=word_count_target), 
-                temp=0.1, 
-                response_format={"type": "json_object"}
-            )
-            
-            score_data = json.loads(score_raw)
-            final_score = score_data.get("score", 0)
-            
-            if final_score >= 85:
-                status.update(label=f"✅ Kwaliteit Goedgekeurd (Score: {final_score})", state="complete")
-            else:
-                status.update(label=f"❌ Kwaliteit Onvoldoende (Score: {final_score})", state="error")
+        # FASE 3
+        st.write("✨ Assembler smeedt de narratieve ketting...")
+        final_article = call_ai(f"Rauwe tekst:\n{full_raw_content}", ASSEMBLER_PROMPT.format(anchor=anchor_text), temp=0.7)
+        
+        # FASE 4
+        st.write("🧐 Gatekeeper voert audit uit...")
+        score_raw = call_ai(
+            f"Tekst:\n\n{final_article}", 
+            SCORER_PROMPT.format(target=word_count_target, anchor=anchor_text), 
+            temp=0.1, 
+            response_format={"type": "json_object"}
+        )
+        
+        score_data = json.loads(score_raw)
+        final_score = score_data.get("score", 0)
+        
+        if final_score >= 85:
+            status.update(label=f"✅ Kwaliteit OK (Score: {final_score})", state="complete")
+        else:
+            status.update(label=f"❌ AFGEKEURD (Score: {final_score})", state="error")
 
-        # --- OUTPUT ---
-        tab1, tab2, tab3 = st.tabs(["💎 Final Asset", "📊 Audit Rapport", "🧬 Blueprint"])
-        
-        with tab1:
-            if final_score >= 85:
-                c_final = count_words(final_article)
-                st.metric("Volume", f"{c_final} woorden", delta=int(c_final - word_count_target))
-                st.markdown(final_article)
-                st.download_button("Download Asset", final_article, file_name="export.md")
-            else:
-                st.warning(f"Output geblokkeerd. Score: {final_score}/100.")
-                st.error(f"REDE: {score_data.get('reasoning')}")
-                st.info(f"VERBETERINGEN: {score_data.get('improvements')}")
-                st.subheader("Rauwe tekst voor analyse:")
-                st.text_area("Ruw", final_article, height=300)
-        
-        with tab2:
-            st.json(score_data)
-        
-        with tab3:
-            st.markdown(blueprint)
+    # --- RESULTAAT ---
+    tab1, tab2, tab3 = st.tabs(["💎 Final Asset", "📊 Audit", "🧬 Blueprint"])
+    with tab1:
+        c_final = count_words(final_article)
+        st.metric("Volume", f"{c_final} woorden", delta=int(c_final - word_count_target))
+        if final_score < 85:
+            st.error(f"Score te laag: {final_score}. Analyseer rapport.")
+        st.markdown(final_article)
+        st.download_button("Download Asset", final_article, file_name="output.md")
+    with tab2:
+        st.json(score_data)
+    with tab3:
+        st.markdown(blueprint)
