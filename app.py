@@ -4,8 +4,7 @@ import os
 
 # --- CONFIGURATIE ---
 st.set_page_config(page_title="Authority Content Engine v1.0", layout="wide")
-client = OpenAI(api_key="JOUW_API_KEY_HIER") # Gebruik bij voorkeur st.secrets of env
-
+client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 # --- SYSTEM PROMPTS (Jouw 'Latest and Greatest' Instructies) ---
 WRITER_PROMPT = """ROL:
 Jij bent een Senior Copywriter met een achtergrond in onderzoeksjournalistiek en psychologische marketing. Je schrijft niet 'voor Google', maar 'voor mensen, zodat Google ervan houdt'. Jouw teksten stralen autoriteit, ervaring en vertrouwen uit (E-E-A-T). Je bent meester in het aanpassen van je stem aan de omgeving.
