@@ -5,73 +5,68 @@ import re
 import json
 
 # --- PRODUCT CONFIGURATIE ---
-st.set_page_config(page_title="Authority Engine v8.0 | Precision Edition", layout="wide")
+st.set_page_config(page_title="Authority Engine v10.0 | Anti-Slop Edition", layout="wide")
 
 try:
     client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 except Exception as e:
-    st.error("Kritieke fout: API-sleutel ontbreekt.")
+    st.error("Kritieke fout: API-sleutel ontbreekt in Secrets.")
 
 def count_words(text):
     return len(text.split())
 
-# --- AGENT 1: THE ARCHITECT (Focus & Volume Planning) ---
-ARCHITECT_PROMPT = """Jij bent de Lead Strategist. Ontwerp een Paragraph Map voor exact {target} woorden.
+# --- AGENT 1: THE ARCHITECT (Nuchtere Planning) ---
+ARCHITECT_PROMPT = """Jij bent een cynische Hoofdredacteur. Ontwerp een Paragraph Map voor {target} woorden.
 ONDERWERP: {url}
 KLANT: {client}
-ANKER: {anchor}
+PLATFORM: {platform}
 
 EISEN:
-1. STRUCTUUR: Maak exact 4 hoofdstukken (H2). Dit beperkt de kans op wildgroei in volume.
-2. FOCUS: Schrijf over de specifieke productcategorie van de URL.
-3. PLANNING: Verdeel de {target} woorden over deze 4 hoofdstukken.
-4. TAAL: Nederlands.
+1. GEEN BULLSHIT: Schrijf niet over 'oases' of 'stijl'. Schrijf over de praktische realiteit: ruimtegebrek, montage, prijs, en duurzaamheid van {client}.
+2. STRUCTUUR: 4 hoofdstukken (H2).
+3. FOCUS: Gebruik technische details van de URL ({url}). Praat over materialen, afmetingen en de frustratie van rondslingerende troep.
+4. TAAL: Nuchter Nederlands.
 """
 
-# --- AGENT 2: THE TITAN WRITER (Hyperlink & Style Specialist) ---
-WRITER_PROMPT = """Jij bent een bekroonde journalist. Je schrijft menselijk, scherp en technisch perfect.
+# --- AGENT 2: THE TITAN WRITER (De Nuchtere Journalist) ---
+WRITER_PROMPT = """Jij bent een nuchtere consumentenjournalist. Je schrijft voor mensen die een hekel hebben aan marketing-gezwets.
 
+JOUW STIJL:
+- ZWARTE LIJST (VERBODEN): 'oase', 'harmonieus', 'samenspel', 'ontdekkingsreis', 'beleving', 'esthetiek', 'minimalistisch', 'glamour', 'balans', 'duurzaamheid' (zonder bewijs).
+- SCHRIJFSTIJL: Direct, feitelijk, observerend. Gebruik korte zinnen.
+- SHOW, DON'T TELL: Schrijf over spaanplaat, schroeven, het gewicht van een jas, en de ruimte onder een bed.
+- TAAL: Volwassen Nederlands. Geen 'AI-clichés' of Engelse zinsbouw.
+
+{link_instruction}
+"""
+
+# --- AGENT 3: THE ASSEMBLER (De Schaar) ---
+ASSEMBLER_PROMPT = """Jij bent een strenge Eindredacteur. Je krijgt 4 secties tekst.
 JOUW OPDRACHT:
-Schrijf de tekst voor de toegewezen H2-sectie.
-DOEL: Schrijf ongeveer {section_target} woorden.
-
-STRICTE SEO-EIS:
-- Je MOET de ankertekst en de URL verwerken als een Markdown hyperlink: [{anchor}]({url}).
-- Doe dit op een natuurlijke manier in de lopende tekst. De link mag niet aanvoelen als een advertentie.
-
-STIJL:
-- Gebruik 'Show, Don't Tell'. Praat over de realiteit van {client} producten (bijv. kledingkasten).
-- GEEN AI-CLICHÉS: Verboden zijn 'baken', 'feniks', 'in de wereld van', 'ontdek', 'navigeren'.
-- TAAL: Rijk Nederlands.
+1. SINGLE LINK POLICY: Er mag in het HELE artikel slechts ÉÉN hyperlink staan naar {url}. Verwijder alle andere hyperlinks onmiddellijk en maak er platte tekst van.
+2. SCHRAPPEN: Verwijder elke zin die klinkt als 'marketing-blabla' of 'AI-vulling'.
+3. VOLUME: Smeed de tekst aaneen tot ongeveer {target} woorden.
+4. METADATA: Title (feitelijk), Meta (direct), Slug.
 """
 
-# --- AGENT 3: THE ASSEMBLER (Volume Trimmer & Flow) ---
-ASSEMBLER_PROMPT = """Jij bent de Eindredacteur. Je smeedt de hoofdstukken aaneen tot een meesterwerk van {target} woorden.
-
-JOUW TAAK:
-1. HYPERLINK CHECK: Controleer of de link [{anchor}]({url}) correct aanwezig is. Als de URL los staat, zet hem dan om in de juiste Markdown-hyperlink.
-2. VOLUME CONTROLE: Als de totale tekst veel langer is dan {target} woorden, kort dan de meest wollige alinea's in. Wees meedogenloos voor 'fluff'.
-3. NARRATIEVE FLOW: Zorg voor vloeiende overgangen.
-4. SEO: Voeg Metadata (Title, Meta, Slug) toe bovenaan.
-"""
-
-# --- AGENT 4: THE GATEKEEPER (Final Precision Audit) ---
-SCORER_PROMPT = """Jij bent de Poortwachter. Beoordeel de tekst op target {target} en de aanwezigheid van de hyperlink.
-
-STRIKTE AFKEUR (Score < 10):
-1. De Markdown hyperlink [{anchor}]({url}) ontbreekt.
-2. De tekst is meer dan 20% langer of korter dan {target} woorden.
+# --- AGENT 4: THE GATEKEEPER (De 'Slop' Detector) ---
+SCORER_PROMPT = """Jij bent een AI-detectie specialist en taal-snob.
+SCORE < 10 ALS:
+- De woorden 'oase', 'harmonieus', 'samenspel' of 'beleving' voorkomen.
+- Er meer dan één hyperlink in de tekst staat.
+- De tekst klinkt als een verkoopbrochure in plaats van een journalistiek stuk.
+- De ankertekst '{anchor}' niet exact één keer gelinkt is.
 
 JSON OUTPUT:
 {{
-    "score": 88,
-    "reasoning": "Focus op lengte en link-integratie.",
-    "improvements": "Hoe kan het nog korter of krachtiger?"
+    "score": 0,
+    "reasoning": "Wees genadeloos over AI-clichés.",
+    "slop_count": "Aantal gevonden verboden woorden"
 }}
 """
 
-# --- AI ENGINE ---
-def call_ai(prompt, system_instruction, temp=0.8, response_format=None):
+# --- ENGINE ---
+def call_ai(prompt, system_instruction, temp=0.75, response_format=None):
     args = {
         "model": "gpt-4o",
         "messages": [
@@ -86,51 +81,57 @@ def call_ai(prompt, system_instruction, temp=0.8, response_format=None):
     return response.choices[0].message.content
 
 # --- UI ---
-st.title("🛡️ Authority Engine v8.0")
-st.subheader("Precision Pipeline: Hyperlink Enforced & Volume Controlled")
+st.title("🛡️ Authority Engine v10.0")
+st.subheader("Anti-Slop Content Pipeline: Journalistieke Precisie")
 
 with st.sidebar:
     st.header("📋 Briefing")
-    client_name = st.text_input("Klant", value="VidaXL")
+    client_name = st.text_input("Klant", value="VidaXL NL")
     target_url = st.text_input("URL", value="https://www.vidaxl.nl/g/4063/kledingkasten")
     anchor_text = st.text_input("Ankertekst", value="kledingkast")
     target_domain = st.text_input("Platform", value="dagelijksestandaard.nl")
     word_count_target = st.slider("Target Woorden", 600, 1500, 900, step=50)
     
-    start_btn = st.button("GENEREER MET PRECISIE", type="primary")
+    start_btn = st.button("GENEREER ZONDER SLOP", type="primary")
 
 if start_btn:
-    with st.status("🏗️ Productie gestart...", expanded=True) as status:
-        # FASE 1: ARCHITECT (4 hoofdstukken ipv 5 om volume te beperken)
-        st.write("📐 Architect ontwerpt de Paragraph Map...")
-        blueprint = call_ai(f"Insteek: Kwaliteitsartikel over de producten op {target_url}", 
-                            ARCHITECT_PROMPT.format(target=word_count_target, client=client_name, platform=target_domain, url=target_url, anchor=anchor_text))
+    with st.status("🏗️ Pijplijn gesaneerd. Productie start...", expanded=True) as status:
+        # FASE 1
+        st.write("📐 Architect maakt nuchter plan...")
+        blueprint = call_ai(f"URL: {target_url}. Klant: {client_name}", 
+                            ARCHITECT_PROMPT.format(target=word_count_target, client=client_name, platform=target_domain, url=target_url))
         
-        # FASE 2: WRITER (Buffer verlaagd naar 10%)
+        # FASE 2
         h2_sections = re.split(r'##', blueprint)[1:]
         full_raw_content = ""
         section_target = int((word_count_target * 1.1) // 4)
         
         for i, s in enumerate(h2_sections):
-            st.write(f"🖋️ Writer produceert Hoofdstuk {i+1} (~{section_target} woorden)...")
+            # HARD LINK CONTROL
+            if i == 0:
+                l_inst = f"VERPLICHTE LINK: Verwerk exact één keer de link [{anchor_text}]({target_url}) in de tekst."
+            else:
+                l_inst = "GEBRUIK GEEN HYPERLINKS. Schrijf alleen platte tekst."
+
+            st.write(f"🖋️ Writer produceert Sectie {i+1}...")
             section_text = call_ai(
-                f"Sectie: {s}\nANKER & URL: [{anchor_text}]({target_url})",
-                WRITER_PROMPT.format(section_target=section_target, client=client_name, anchor=anchor_text, url=target_url),
-                temp=0.85
+                f"Sectie: {s}",
+                WRITER_PROMPT.format(section_target=section_target, client=client_name, link_instruction=l_inst),
+                temp=0.8
             )
             full_raw_content += f"\n\n## {section_text}"
-            time.sleep(1)
+            time.sleep(0.5)
 
-        # FASE 3: ASSEMBLER (Nu met trim-instructie)
-        st.write("✨ Assembler smeedt en trimt de tekst...")
-        final_article = call_ai(f"Smeed dit aaneen tot exact {word_count_target} woorden. Trim waar nodig:\n{full_raw_content}", 
-                                ASSEMBLER_PROMPT.format(anchor=anchor_text, url=target_url, target=word_count_target), temp=0.7)
+        # FASE 3
+        st.write("✨ Assembler snijdt de fluff weg...")
+        final_article = call_ai(f"Smeed dit aaneen tot {word_count_target} woorden. URL: {target_url}:\n{full_raw_content}", 
+                                ASSEMBLER_PROMPT.format(target=word_count_target, url=target_url), temp=0.5)
         
-        # FASE 4: GATEKEEPER
-        st.write("🧐 Gatekeeper controleert link en volume...")
+        # FASE 4
+        st.write("🧐 Gatekeeper controleert op AI-slop...")
         score_raw = call_ai(
-            f"Eindtekst:\n\n{final_article}", 
-            SCORER_PROMPT.format(target=word_count_target, anchor=anchor_text, url=target_url), 
+            f"Tekst:\n\n{final_article}", 
+            SCORER_PROMPT.format(target=word_count_target, anchor=anchor_text), 
             temp=0.1, 
             response_format={"type": "json_object"}
         )
@@ -141,14 +142,16 @@ if start_btn:
         if final_score >= 85:
             status.update(label=f"✅ Asset Goedgekeurd (Score: {final_score})", state="complete")
         else:
-            status.update(label=f"⚠️ Score: {final_score}. Volume of link niet optimaal.", state="error")
+            status.update(label=f"❌ AFGEKEURD (Score: {final_score})", state="error")
 
     # OUTPUT
-    tab1, tab2 = st.tabs(["💎 Final Asset", "📊 Audit"])
+    tab1, tab2 = st.tabs(["💎 Asset", "📊 Audit"])
     with tab1:
         c_final = count_words(final_article)
         st.metric("Gerealiseerd Volume", f"{c_final} woorden", delta=int(c_final - word_count_target))
+        if final_score < 85:
+            st.error(f"Systeem blokkade: Tekst bevat te veel AI-kenmerken (Score: {final_score})")
+            st.write(score_data.get("reasoning"))
         st.markdown(final_article)
-        st.download_button("Download Markdown", final_article, file_name="export.md")
     with tab2:
         st.json(score_data)
