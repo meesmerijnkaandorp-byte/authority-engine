@@ -5,7 +5,7 @@ import re
 import json
 
 # --- CONFIGURATIE ---
-st.set_page_config(page_title="Authority Engine v50.0 | The Python Hammer", layout="wide")
+st.set_page_config(page_title="Authority Engine v52.0 | The Human Touch", layout="wide")
 
 try:
     client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
@@ -20,29 +20,31 @@ CONFIG = {
 }
 
 LANG_INSTRUCTIONS = {
-    "NL": "Schrijf het volledige artikel uitsluitend in professioneel, idiomatisch Nederlands op moedertaalniveau. Gebruik een vloeiende, natuurlijke en overtuigende schrijfstijl. Vermijd letterlijk vertaalde formuleringen.",
+    "NL": "Schrijf het volledige artikel uitsluitend in professioneel, idiomatisch Nederlands op moedertaalniveau. Gebruik een vloeiende, menselijke en overtuigende schrijfstijl. Vermijd letterlijk vertaalde formuleringen.",
     "EN": "Write the full article exclusively in professional, idiomatic English at native level. Use a smooth, natural, expert, and persuasive writing style.",
     "DE": "Schreiben Sie das vollständige Artikel ausschließlich in professionellem, idiomatischem Deutsch auf Muttersprachniveau. Verwenden Sie einen fließenden, natürlichen und überzeugenden Schreibstil.",
     "FR": "Écrivez l'article exclusivement en français professionnel et idiomatique de niveau langue maternelle. Utilisez un style d'écriture fluide, naturel et convaincant."
 }
 
+# De zwarte lijst is fors uitgebreid met de typische "AI-wrap-up" woorden.
 UNIVERSAL_BAN = [
     "oase", "essentieel", "cruciaal", "wereld van verschil", "esthetiek", "esthetisch", "harmonie", "samenspel", 
     "paradigma", "fundamenteel", "belangrijkste rol", "stel je voor", "in de moderne wereld", 
-    "niet alleen ... maar ook", "ultieme", "ongeëvenaard", "tegenwoordig", "meer dan ooit"
+    "niet alleen ... maar ook", "ultieme", "ongeëvenaard", "tegenwoordig", "meer dan ooit",
+    "weloverwogen keuze", "draagt bij aan", "functionele en aantrekkelijke", "kortom", "concluderend"
 ]
 
 TOV_PROFILES = {
-    "Expert/Adviserend": {
-        "instructie": "Schrijf als een doorgewinterde, onafhankelijke expert. Geef direct, concreet en praktisch advies gebaseerd op harde feiten. De lezer zoekt autoriteit. Wees stellig maar genuanceerd. Noem afmetingen, materialen, en harde vuistregels. Vermijd filosofische bespiegelingen.",
+    "Expert/Adviserend (Menselijk)": {
+        "instructie": "Schrijf als een directe, ervaren expert. GEEN modelmatige AI-structuren. Geef rauw, concreet en praktisch advies. Voorbeeld van de toon: 'Een stoel kan er prachtig uitzien, maar als je na twintig minuten al verzit, heb je er weinig aan.' Vermijd elke vorm van filosofische bespiegeling.",
         "ban": UNIVERSAL_BAN + ["gezelligheid", "sfeervol", "beleving", "droom", "magisch", "knus"]
     },
     "Verhalend/Lifestyle": {
-        "instructie": "Schrijf nuchter, beschouwend en verhalend. Gebruik de 'zaterdagmorgen-energie': herkenbare details in het dagelijks leven. Vermijd abstracte marketingtaal. Maak de tekst tastbaar door zintuiglijke details te benoemen.",
+        "instructie": "Schrijf nuchter, beschouwend en menselijk. Gebruik de 'zaterdagmorgen-energie'. Maak de tekst tastbaar met concrete voorbeelden (bijv. 'Bij een gezin met jonge kinderen is een stoffen stoel minder handig dan kunstleer').",
         "ban": UNIVERSAL_BAN + ["synergie", "optimaliseren", "implementeren", "efficiëntie"]
     },
     "Zakelijk/Technisch": {
-        "instructie": "Schrijf professioneel, analytisch, B2B-gericht en objectief. Focus op specificaties, kosten, ROI en bruikbaarheid. De tekst moet klinken als een whitepaper.",
+        "instructie": "Schrijf professioneel en to-the-point voor B2B. Focus op specificaties en ROI, maar blijf menselijk en direct. Geen robotachtige opsommingen.",
         "ban": UNIVERSAL_BAN + ["gevoel", "beleving", "passie", "thuis", "knus"]
     }
 }
@@ -61,10 +63,6 @@ def clean_json_string(raw_string):
     except: return None
 
 def enforce_sentence_case(text):
-    """
-    De Python Hammer: Pakt elke Markdown kop (#, ##, ###) en forceert 
-    dat ALLEEN de allereerste letter een hoofdletter is. Geen AI die hier omheen kan.
-    """
     lines = text.split('\n')
     new_lines = []
     for line in lines:
@@ -73,13 +71,36 @@ def enforce_sentence_case(text):
             if match:
                 prefix = match.group(1)
                 content = match.group(2).strip()
-                # .capitalize() maakt de eerste letter groot en de rest KLEIN.
                 new_lines.append(f"{prefix} {content.capitalize()}")
             else:
                 new_lines.append(line)
         else:
             new_lines.append(line)
     return '\n'.join(new_lines)
+
+def apply_python_ban_hammer(text):
+    replacements = {
+        "essentieel": "onmisbaar",
+        "cruciaal": "doorslaggevend",
+        "cruciale": "grote",
+        "wereld van verschil": "groot verschil",
+        "esthetiek": "vormgeving",
+        "esthetisch": "visueel",
+        "harmonie": "balans",
+        "samenspel": "wisselwerking",
+        "weloverwogen keuze": "goede keuze",
+        "draagt bij aan": "zorgt voor",
+        "functionele en aantrekkelijke": "praktische"
+    }
+    
+    for bad, good in replacements.items():
+        def repl(m):
+            word = m.group()
+            if word.istitle(): return good.capitalize()
+            elif word.isupper(): return good.upper()
+            return good
+        text = re.sub(rf'\b{bad}\b', repl, text, flags=re.IGNORECASE)
+    return text
 
 def cleanup_text(text):
     t = str(text or '')
@@ -89,19 +110,19 @@ def cleanup_text(text):
     t = re.sub(r'[ \t]+\n', '\n', t)
     t = re.sub(r'\n{3,}', '\n\n', t)
     t = re.sub(r'[ \t]{2,}', ' ', t)
-    # Voer de Python Hammer uit op de koppen
     t = enforce_sentence_case(t)
+    t = apply_python_ban_hammer(t)
     return t.strip()
 
 def get_intent_and_target(anchor, language, base_target):
     text = anchor.lower()
-    intent_tone = "bied diepgaande educatie en betrouwbaar expert-advies."
+    intent_tone = "bied direct toepasbaar expert-advies met harde voorbeelden."
     target = base_target
     if re.search(r'\b(prijs|kosten|offerte|bestellen|kopen|aanbieding|deal|offer|buy|kaufen|acheter)\b', text):
-        intent_tone = "wees commercieel adviserend, stuur aan op de juiste aankoopbeslissing met concrete argumenten."
+        intent_tone = "wees sturend en geef concrete aankoopcriteria, zonder commercieel te schreeuwen."
         target = max(base_target, 1000)
     elif re.search(r'\b(vergelijk|verschil|advies|uitleg|informatie|wat is|hoe werkt|compare|how|comment)\b', text):
-        intent_tone = "wees puur informationeel, leg uit hoe dingen werken en weeg opties feitelijk af."
+        intent_tone = "wees puur informationeel, gebruik vergelijkingen uit de praktijk."
         target = max(base_target, 1300)
     return intent_tone, target
 
@@ -113,13 +134,13 @@ def validate_output(text, target_url, ban_list):
     }
 
 def get_fallback_sentence(language, anchor_text, target_url):
-    if language == "NL": return f"Meer praktische informatie en opties voor een [{anchor_text}]({target_url}) vind je online."
-    if language == "EN": return f"For more practical information regarding a [{anchor_text}]({target_url}), consult a specialized provider."
-    if language == "DE": return f"Weitere praktische Informationen für ein [{anchor_text}]({target_url}) finden Sie online."
-    if language == "FR": return f"Pour plus d'informations pratiques concernant un [{anchor_text}]({target_url}), consultez les options en ligne."
+    if language == "NL": return f"Ga je een [{anchor_text}]({target_url}), kijk dan goed naar de opties die online beschikbaar zijn."
+    if language == "EN": return f"If you are looking for a [{anchor_text}]({target_url}), be sure to compare the practical options online."
+    if language == "DE": return f"Wenn Sie ein [{anchor_text}]({target_url}), achten Sie auf die praktischen Optionen."
+    if language == "FR": return f"Si vous cherchez un [{anchor_text}]({target_url}), comparez bien les options pratiques."
     return f"Meer informatie: [{anchor_text}]({target_url})."
 
-# --- ONGECOMPROMITTEERDE SYSTEM PROMPTS (v50.0) ---
+# --- ONGECOMPROMITTEERDE SYSTEM PROMPTS (v52.0) ---
 
 STRATEGIST_SYSTEM = """Jij bent een Meesterlijke Content Architect. Je levert UITSLUITEND JSON.
 TAAL: {language_instruction}
@@ -127,20 +148,18 @@ TONE OF VOICE: {tov_instruction}
 INTENTIE: {intent_tone}
 
 TAAK:
-1. USE-CASE BRUG: Hoe gebruikt de lezer van {publisher_info} het product ({anchor}) fysiek? Verbind dit.
-2. EXPERT DATA: Bedenk per hoofdstuk 3 snoeiharde, concrete datapunten (afmetingen, feiten, materiaalverschillen).
-3. STRUCTUUR: Plan 4 of 5 unieke secties.
-4. KOPPEN: Gebruik uitsluitend kleine letters voor alle woorden in de kop, behalve het allereerste woord.
+1. MENSELIJKE STRUCTUUR: Maak het NIET te perfect of modelmatig. Mensen denken niet in perfect symmetrische Wikipedia-koppen. Bedenk directe, praktische invalshoeken.
+2. CONCRETE DATA: Geef per sectie 3 zeer specifieke, dagelijkse voorbeelden. (bijv. "Stoffen stoel vs kinderen", "20 minuten zitten").
+3. KOPPEN: Gebruik uitsluitend kleine letters voor alle woorden in de kop, behalve het allereerste woord.
 
 SCHEMA:
 {{
   "title": "Dit is een sterke kop zonder onnodige hoofdletters",
-  "use_case_bridge": "Jouw brug tussen publisher en product.",
   "sections": [
     {{ 
-      "h2": "Dit is een tussenkop met kleine letters", 
-      "key_points": ["Hard feit 1", "Diepgaand inzicht 2", "Vuistregel 3"],
-      "friction": "Welk probleem lossen we hier op?"
+      "h2": "Dit is een directe tussenkop", 
+      "key_points": ["Concreet voorbeeld 1", "Harde eis 2", "Praktijkgeval 3"],
+      "friction": "Welke herkenbare irritatie lossen we op?"
     }}
   ]
 }}"""
@@ -150,27 +169,28 @@ TAAL: {language_instruction}
 STIJL: {tov_instruction} 
 
 JOUW SCHRIJFWETTEN:
-1. ABSOLUTE LENGTE: Schrijf zéér uitgebreid. Minimaal {sec_target} woorden. Werk de datapunten diepgaand uit.
-2. GEEN OPSOMMINGEN: Schrijf uitsluitend in lange, lopende alinea's. GEEN bulletpoints.
-3. ANTI-FLUFF: GEEN inleidingen zoals "Stel je voor...". Geef de lezer direct waarde en feiten.
-4. VERBODEN WOORDEN: Gebruik NOOIT deze woorden: {ban_list}.
+1. MENSELIJK EN DIRECT: Vermijd "AI-taal" en perfecte, voorspelbare alinea's. Schrijf zoals je praat tegen een vriend. Bijvoorbeeld: "Een stoel kan er prachtig uitzien, maar als je na twintig minuten al verzit, heb je er weinig aan."
+2. EXTREEM CONCREET: Gebruik altijd praktische details uit het echte leven. Bijvoorbeeld: "Bij een gezin met jonge kinderen is een stoffen stoel minder handig dan kunstleer of kunststof."
+3. GEEN ALGEMENE SLOTZINNEN: Sluit je alinea NOOIT af met voorspelbare clichés zoals "Een weloverwogen keuze draagt bij aan een functionele ruimte." Geef je advies en stop met praten.
+4. LENGTE ZONDER FLUFF: Haal de {sec_target} woorden door diep in voorbeelden te duiken, niet door theorie te herhalen.
+5. GEEN OPSOMMINGEN: Schrijf uitsluitend in lopende alinea's.
+6. VERBODEN WOORDEN: {ban_list}.
 
 Schrijf uitsluitend de tekst voor dit specifieke hoofdstuk."""
 
-WEAVER_SYSTEM = """Jij bent de Meedogenloze Eindredacteur. Je ontvangt een ruw, lang artikel. 
+WEAVER_SYSTEM = """Jij bent de Meedogenloze Eindredacteur. Je ontvangt een ruw artikel.
 JOUW OUTPUT IS UITSLUITEND PLATTE MARKDOWN TEKST. GEEN JSON!
 
 TAAL: {language_instruction}
-STIJL: {tov_instruction}
 
 JOUW TAKEN:
-1. INKORT-VERBOD: Behoud de volledige lengte en diepgang van de originele tekst.
-2. BAN-WORDS ZUIVEREN: Inspecteer de tekst. Als je woorden ziet als 'essentieel', 'cruciaal', 'esthetisch' of 'esthetiek', herschrijf je die zin direct! VERBODEN WOORDEN: {ban_list}.
-3. BULLET-ZUIVERING: Als er opsommingen of streepjes (-) in staan, maak je er lopende alinea's van.
-4. KOPPEN-CHECK: Zet alle hoofdletters in de Markdown koppen (##) om naar kleine letters. Alleen het eerste woord mag een hoofdletter hebben.
-5. DE ANKERTEKST: Plaats EXACT ÉÉN KEER in de tekst de marker [ANCHOR_SPOT] voor de term '{anchor}'. 
-   - Modus ({mode}): Verwerk deze term op de meest vloeiende, onzichtbare manier in een bestaande alinea. Geen geforceerde introducties. De zin moet 100% kloppend Nederlands zijn.
-6. CONCLUSIE: Schrijf helemaal aan het einde één krachtige, afsluitende alinea.
+1. TARGET LENGTE: Smeed de tekst samen tot EXACT rond de {target} woorden (+/- 10%). Behoud de feitelijke diepgang en de concrete voorbeelden.
+2. VERBODEN WOORDEN & SLOTZINNEN ZUIVEREN: Verwijder vage AI-conclusies aan het einde van alinea's (zoals "Dit draagt bij aan een optimaal resultaat"). Schrap woorden uit de {ban_list}.
+3. BULLET-ZUIVERING: Verwijder eventuele opsommingen en maak er lopende zinnen van.
+4. DE ANKERTEKST NATUURLIJK INVOEGEN: Plaats EXACT ÉÉN KEER de marker [ANCHOR_SPOT] voor de term '{anchor}'. 
+   - Modus ({mode}): Als het anker lastig of lelijk is (zoals 'eetkamerstoel kopen'), gebruik dan deze verplichte natuurlijke constructie: 
+     "Ga je een [ANCHOR_SPOT], kijk dan niet alleen naar het ontwerp, maar ook naar..." of "Besluit je online een [ANCHOR_SPOT], let dan goed op...". Maak het 100% menselijk.
+5. GEEN VAGE CONCLUSIES: Voeg alleen een zeer directe, actiegerichte afsluiting toe. Geen clichés.
 
 Lever uitsluitend de gezuiverde Markdown tekst af. Zorg dat koppen (##) behouden blijven."""
 
@@ -197,8 +217,8 @@ def call_ai(system, prompt, temp=0.7, json_mode=False):
     return response.choices[0].message.content
 
 # --- UI INTERFACE ---
-st.title("🛡️ Authority Engine v50.0")
-st.caption("The Python Hammer | 100% Garantie op Sentence Case Koppen")
+st.title("🛡️ Authority Engine v52.0")
+st.caption("The Human Touch | Rauwe zinnen, harde voorbeelden & perfecte SEO-integratie")
 
 with st.sidebar:
     st.header("📋 Setup & Locatie")
@@ -211,7 +231,7 @@ with st.sidebar:
     st.header("🎭 Publisher & Toon")
     tov_selection = st.selectbox("Tone of Voice", list(TOV_PROFILES.keys()), index=0)
     publisher_info = st.text_area("Publisher Niche", value="Culinaire website met eenvoudige recepten en de biologische citroen in de hoofdrol.")
-    base_word_count = st.slider("Basis Target Woorden", CONFIG["MIN_WORDS"], CONFIG["MAX_WORDS"], 950, step=50)
+    base_word_count = st.slider("Target Woorden (Strak)", CONFIG["MIN_WORDS"], CONFIG["MAX_WORDS"], 950, step=50)
     
     start_btn = st.button("PRODUCEER PREMIUM ASSET", type="primary", use_container_width=True)
 
@@ -223,10 +243,10 @@ if start_btn:
     
     intent_tone, dynamic_target = get_intent_and_target(anchor_text, language_sel, base_word_count)
 
-    with st.status(f"🏗️ Engine start ({language_sel}) - Target: {dynamic_target}w...", expanded=True) as status:
+    with st.status(f"🏗️ Engine start ({language_sel}) - Strak Doel: {dynamic_target}w...", expanded=True) as status:
         
         # 1. STRATEGIST
-        st.write("📐 Fase 1: Blueprint genereren...")
+        st.write("📐 Fase 1: Asymmetrische Blueprint genereren...")
         strat_sys = STRATEGIST_SYSTEM.format(
             language_instruction=lang_inst, tov_instruction=current_tov["instructie"],
             intent_tone=intent_tone, publisher_info=publisher_info, anchor=anchor_text
@@ -236,7 +256,7 @@ if start_btn:
         blueprint = json.loads(clean_json_string(raw_strat) or "{}")
         
         # 2. WRITER
-        st.write("🖋️ Fase 2: Concepttekst schrijven (in silo's)...")
+        st.write("🖋️ Fase 2: Concepttekst schrijven met harde praktijkvoorbeelden...")
         full_draft = ""
         sec_target = dynamic_target // max(1, len(blueprint.get("sections", [1,2,3,4])))
         
@@ -245,17 +265,17 @@ if start_btn:
                 language_instruction=lang_inst, tov_instruction=current_tov["instructie"], 
                 intent_tone=intent_tone, ban_list=ban_list_str, sec_target=sec_target
             )
-            write_prompt = f"Kop: {section.get('h2')}\nFeiten om te verwerken: {', '.join(section.get('key_points', []))}"
+            write_prompt = f"Kop: {section.get('h2')}\nConcrete voorbeelden om te verwerken: {', '.join(section.get('key_points', []))}"
             draft = call_ai(write_sys, write_prompt)
             full_draft += f"## {section.get('h2')}\n{draft}\n\n"
 
         # 3. THE WEAVER
-        st.write("✨ Fase 3: The Weaver (Kwaliteit en Ban-words opschonen)...")
+        st.write("✨ Fase 3: The Weaver (Kwaliteit, Target lengte & Link integratie)...")
         weaver_sys = WEAVER_SYSTEM.format(
             language_instruction=lang_inst, tov_instruction=current_tov["instructie"],
-            ban_list=ban_list_str, anchor=anchor_text, mode=anchor_mode
+            ban_list=ban_list_str, anchor=anchor_text, mode=anchor_mode, target=dynamic_target
         )
-        weaved_text = call_ai(weaver_sys, f"Zuiver dit artikel. Maak het vloeiend, lang, let op je koppen, en integreer de [ANCHOR_SPOT]:\n\n{full_draft}", json_mode=False)
+        weaved_text = call_ai(weaver_sys, f"Sloop alle AI-wrap-up zinnen eruit, smeed het tot circa {dynamic_target} woorden en integreer de [ANCHOR_SPOT] natuurlijk:\n\n{full_draft}", json_mode=False)
 
         # 4. THE PACKAGER
         st.write("📦 Fase 4: The Packager (JSON verpakken)...")
@@ -280,7 +300,7 @@ if start_btn:
             assembled_body += f"\n\n{fallback_str}"
             st.info("💡 Systeem ingreep: AI negeerde de ankertekst. Geforceerde linguïstische fallback toegepast.")
 
-        # De genadeloze opschoning en Python Hammer uitvoeren op de body én de titel
+        # De genadeloze Python Hammer en Cleanup
         final_json["body"] = cleanup_text(assembled_body)
         if "title" in final_json:
             final_json["title"] = final_json["title"].capitalize()
@@ -296,7 +316,7 @@ if start_btn:
     col1.metric("Volume", f"{final_wc} w", delta=final_wc - dynamic_target)
     col2.metric("Link", "✅ Aanwezig" if qa_final["link_present"] else "❌ FOUT")
     col3.metric("Bullet-Vrij", "✅ Ja" if qa_final['no_bullets'] else "❌ Nee")
-    col4.metric("Ban-List", "✅ Schoon" if not qa_final['ban_words_found'] else f"❌ Fout ({len(qa_final['ban_words_found'])})")
+    col4.metric("Ban-List", "✅ Schoon" if not qa_final['ban_words_found'] else f"⚠️ Waarschuwing")
 
     st.markdown("---")
     st.markdown(final_json['body'])
