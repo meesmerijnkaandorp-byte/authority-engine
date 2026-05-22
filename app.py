@@ -5,14 +5,13 @@ import re
 import json
 
 # --- CONFIGURATIE ---
-st.set_page_config(page_title="Authority Engine v44.0 | Use-Case Weaver", layout="wide")
+st.set_page_config(page_title="Authority Engine v45.0 | The Expert Blueprint", layout="wide")
 
 try:
     client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 except Exception:
     st.error("Kritieke fout: API-sleutel ontbreekt in Secrets.")
 
-# --- CENTRALE ENTERPRISE CONFIGURATIE ---
 CONFIG = {
     "OPENAI_MODEL": "gpt-4o",
     "ENABLE_RETRY_ON_QA_FAIL": True,
@@ -20,7 +19,6 @@ CONFIG = {
     "MAX_WORDS": 1800
 }
 
-# --- TAAL INSTRUCTIES ---
 LANG_INSTRUCTIONS = {
     "NL": "Schrijf uitsluitend in foutloos, idiomatisch Nederlands op moedertaalniveau.",
     "EN": "Write exclusively in professional, native-level English.",
@@ -28,21 +26,20 @@ LANG_INSTRUCTIONS = {
     "FR": "Écrivez exclusivement en français idiomatique et sans fautes."
 }
 
-# --- TONE OF VOICE DEFINITIES & EMBARGO'S ---
-UNIVERSAL_BAN = ["oase", "essentieel", "cruciaal", "wereld van verschil", "esthetiek", "harmonie", "samenspel", "paradigma", "fundamenteel", "belangrijkste rol"]
+UNIVERSAL_BAN = ["oase", "essentieel", "cruciaal", "wereld van verschil", "esthetiek", "harmonie", "samenspel", "paradigma", "fundamenteel", "belangrijkste rol", "stel je voor", "in de moderne wereld", "niet alleen ... maar ook"]
 
 TOV_PROFILES = {
+    "Expert/Adviserend (Nieuw)": {
+        "instructie": "Schrijf als een doorgewinterde expert. Geef direct, concreet en praktisch advies. Noem afmetingen, specifieke materialen en harde feiten. Vermijd wollige inleidingen en filosofische bespiegelingen over sfeer.",
+        "ban": UNIVERSAL_BAN + ["gezelligheid", "sfeervol", "beleving", "droom", "magisch"]
+    },
     "Verhalend/Lifestyle": {
-        "instructie": "Schrijf nuchter, beschouwend en verhalend. Focus op menselijke ervaring en concrete details in het dagelijks leven.",
+        "instructie": "Schrijf nuchter, beschouwend en verhalend, maar BLIJF CONCREET. Geen lange 'Stel je voor'-scenario's. Geef direct praktische voorbeelden.",
         "ban": UNIVERSAL_BAN + ["synergie", "optimaliseren", "implementeren"]
     },
     "Zakelijk/Technisch": {
-        "instructie": "Schrijf professioneel, analytisch en objectief. Focus op harde specificaties, bruikbaarheid en zakelijke context.",
-        "ban": UNIVERSAL_BAN + ["gevoel", "beleving", "magisch", "passie", "droom"]
-    },
-    "Direct/Nieuwsachtig": {
-        "instructie": "Schrijf kort, to-the-point, feitelijk en urgent. Wars van trage inleidingen en marketingtaal.",
-        "ban": UNIVERSAL_BAN + ["uniek", "ontdek", "adembenemend", "sfeervol"]
+        "instructie": "Schrijf analytisch en objectief. Focus op harde specificaties, kosten en ROI.",
+        "ban": UNIVERSAL_BAN + ["gevoel", "beleving", "passie"]
     }
 }
 
@@ -71,13 +68,13 @@ def cleanup_text(text):
 
 def get_intent_and_target(anchor, language, base_target):
     text = anchor.lower()
-    intent_tone = "professioneel, overtuigend en betrouwbaar."
+    intent_tone = "expert advies, overtuigend en praktisch."
     target = base_target
     if re.search(r'\b(prijs|kosten|offerte|bestellen|kopen|aanbieding|deal|offer|buy|kaufen|acheter)\b', text):
-        intent_tone = "commercieel, conversie-gericht en overtuigend."
+        intent_tone = "commercieel adviserend, gericht op de juiste aankoopcriteria."
         target = max(base_target, 1000)
     elif re.search(r'\b(vergelijk|verschil|advies|uitleg|informatie|wat is|hoe werkt|compare|how|comment)\b', text):
-        intent_tone = "informationeel, adviserend en professioneel."
+        intent_tone = "informationeel expert, gericht op educatie en feiten."
         target = max(base_target, 1300)
     return intent_tone, target
 
@@ -87,70 +84,64 @@ def validate_output(text, ban_list):
         "no_bullets": not re.search(r'(?m)^[-*]\s', text)
     }
 
-# --- SYSTEM PROMPTS (v44.0 - Use-Case Weaver) ---
+# --- SYSTEM PROMPTS (v45.0) ---
 
 STRATEGIST_SYSTEM = """Jij bent een Hoofdredacteur. Je levert UITSLUITEND JSON.
 TAAL: {language_instruction}
+TAAK: Ontwerp een expert-artikel voor {publisher_info} gericht op {anchor}.
 
-BRUG-STRATEGIE (CRUCIAAL):
-Bouw GEEN abstracte theorie (bijv. 'duurzaamheid is belangrijk in auto's en ook in bestek'). 
-Bouw de brug via een PRAKTISCH GEBRUIKSMOMENT.
-Vraag jezelf af: Hoe gebruikt de lezer van de publisher ({publisher_info}) het product ({anchor}) in de praktijk?
-- Kooksite -> Eetkamerstoel = Urenlang tafelen en gasten ontvangen na het koken.
-- Finance site -> Laptop = De thuisadministratie op orde brengen aan de keukentafel.
-- Travel blog -> Kledingkast = Koffers uitpakken en vakantiekleding opbergen.
-
-STRICTE EISEN: 
-- Plan uitsluitend LOPENDE alinea's. GEEN bulletpoints.
-- KOPPEN: Gebruik 'Sentence case'. Alleen het eerste woord krijgt een hoofdletter.
+EXPERT-REGELS (ANTI-FLUFF):
+1. Verzin 4 specifieke, actiegerichte koppen (bijv. "Waarom zithoogte de doorslag geeft" i.p.v. "Comfort en Ergonomie").
+2. Geef per sectie 3 HARDE, CONCRETE adviezen of data-punten in 'key_points' (bijv. "Zithoogte 45-48cm", "60cm ruimte per stoel", "Kunststof vs Stof met kinderen").
+3. Voorkom herhaling. Elke sectie is een silo met een eigen, uniek onderwerp.
+4. KOPPEN: Gebruik 'Sentence case' (Alleen eerste letter is hoofdletter).
 
 SCHEMA:
 {{
-  "title": "Pakkende kop (in sentence case)",
-  "use_case_bridge": "Beschrijf in 1 zin de praktische, fysieke brug tussen de publisher en het product.",
-  "sections": [ {{ "h2": "Kop in sentence case", "focus": "Focus", "friction": "Het probleem" }} ]
+  "title": "Actiegerichte kop (in sentence case)",
+  "sections": [ {{ "h2": "Kop in sentence case", "key_points": ["Concreet feit 1", "Concreet feit 2", "Vuistregel 3"] }} ]
 }}"""
 
-WRITER_SYSTEM = """Jij bent een Senior Vakjournalist.
+WRITER_SYSTEM = """Jij bent een Expert/Vakjournalist.
 TAAL: {language_instruction}
-STIJL & INTENTIE: {tov_instruction} Focus op: {intent_tone}
+STIJL: {tov_instruction} Focus: {intent_tone}
 
-STRICTE EISEN:
-1. GEEN BULLETPOINTS, GEEN OPSOMMINGEN. Schrijf uitsluitend in vloeiende alinea's.
-2. VERBODEN WOORDEN: {ban_list}
-3. HOOFDLETTERS IN KOPPEN: Gebruik uitsluitend 'Sentence case' (bijv. "De impact van materiaal", NIET "De Impact Van Materiaal")."""
+ANTI-FLUFF REGELS:
+1. GEEN "Stel je voor"-inleidingen. Kom direct ter zake.
+2. GEEN herhalende conclusies aan het eind van de alinea (zoals "Kortom, stijl en comfort moeten in balans zijn"). Behandel puur de theorie en feiten.
+3. Gebruik de specifieke `key_points` uit de briefing als harde feiten in je tekst (bijv. verwerk de centimeters of materiaal-verschillen in de zinnen).
+4. GEEN BULLETPOINTS. Schrijf in lopende tekst.
+5. VERBODEN WOORDEN: {ban_list}"""
 
 EDITOR_SYSTEM = """Jij bent de Hoofdredacteur. Je levert UITSLUITEND JSON.
 TAAL: {language_instruction}
-TAAK: Smeed de hoofdstukken aaneen tot een naadloos geheel van ca. {target} woorden.
+TAAK: Smeed aaneen tot ca. {target} woorden.
 
 LINK-STRATEGIE ({mode}):
 Ankertekst: '{anchor}'
-Plaats exact 1x de marker [ANCHOR_SPOT] in de tekst.
-De ankertekst moet logisch landen in het gebruiksmoment van de lezer. Het mag nooit klinken als een plotselinge theorie of advertentie.
-
-- Exact Match: De zin MOET grammaticaal foutloos zijn als je exact de woorden '{anchor}' invult. 
-  Sjablonen: "Een [ANCHOR_SPOT] doe je vaak als...", "Online een [ANCHOR_SPOT] voorkomt dat...", "Bij de overweging tot een [ANCHOR_SPOT]...".
-- Natuurlijk: Verbuig de term (bijv. meervoud of lidwoorden) zodat het 100% natuurlijk en menselijk klinkt.
+Plaats de marker [ANCHOR_SPOT] exact 1x.
+- Bij 'Exact Match': De tekst MOET letterlijk '{anchor}' bevatten. Als het anker grammaticaal onhandig is (bijv. infinitief zonder lidwoord), gebruik dan een vluchtstrook-zin zoals: "Wanneer het gaat om {anchor}, is het belangrijk dat..." of "Bij {anchor} letten veel mensen op...". Maak het FOUTLOOS Nederlands.
+- Bij 'Natuurlijk': Verbuig de term vrijuit voor een vloeiende zin (bijv. "nieuwe eetkamerstoelen kopen").
 
 KWALITEITSCONTROLE:
-Voordat je de body schrijft, vul je het veld "anchor_sentence_check" in. Schrijf hier de exacte zin op en valideer de grammatica.
+- Schrijf een KRACHTIGE, SAMENVATTENDE CONCLUSIE als laatste alinea van de `body` waarin je de belangrijkste aankoopcriteria opsomt in lopende tekst.
+- Vul het veld `anchor_sentence_check` in ter controle.
 
 SCHEMA:
 {{
-  "title": "Definitieve kop in sentence case", 
-  "meta": "Meta description", 
+  "title": "Kop in sentence case", 
+  "meta": "Meta", 
   "slug": "url-slug", 
-  "anchor_sentence_check": "De exacte zin met de ankertekst ter controle",
-  "body": "## Tussenkop in sentence case\\n\\nTekst met de kloppende [ANCHOR_SPOT] zin..."
+  "anchor_sentence_check": "De zin met de ankertekst.",
+  "body": "## Tussenkop\\n\\nTekst..."
 }}"""
 
-RETRY_EDITOR_SYSTEM = """Jij bent de Hoofdredacteur. JE VORIGE WERK WERD AFGEKEURD DOOR DE QA.
-HERSTELOPDRACHT: 
-1. Herschrijf de tekst. VERWIJDER ELKE BULLETPOINT EN OPSOMMING. Maak er lopende alinea's van.
-2. KOPPEN: Zorg dat koppen Sentence case hebben.
-3. Behoud de [ANCHOR_SPOT] integratie in een FOUTLOZE zin.
-Lever UITSLUITEND JSON volgens het schema (title, meta, slug, anchor_sentence_check, body)."""
+RETRY_EDITOR_SYSTEM = """Jij bent de Hoofdredacteur. JE VORIGE WERK WERD AFGEKEURD.
+HERSTEL: 
+1. VERWIJDER ELKE BULLETPOINT/OPSOMMING. Maak er lopende alinea's van.
+2. KOPPEN in Sentence case.
+3. Foutloze [ANCHOR_SPOT] integratie.
+Lever UITSLUITEND JSON (title, meta, slug, anchor_sentence_check, body)."""
 
 # --- AI WRAPPER ---
 def call_ai(system, prompt, temp=0.7, json_mode=False):
@@ -163,23 +154,25 @@ def call_ai(system, prompt, temp=0.7, json_mode=False):
     return response.choices[0].message.content
 
 # --- UI INTERFACE ---
-st.title("🛡️ Authority Engine v44.0")
-st.caption("The Use-Case Weaver | Natuurlijke context-bruggen voor elke niche")
+st.title("🛡️ Authority Engine v45.0")
+st.caption("The Expert Blueprint | Concrete Feiten, Geen Fluff")
 
 with st.sidebar:
     st.header("📋 Setup & Locatie")
     language_sel = st.selectbox("Taal", ["NL", "EN", "DE", "FR"])
     target_url = st.text_input("URL", value="https://www.vidaxl.nl/g/6064/eetkamerstoelen")
     anchor_text = st.text_input("Ankertekst", value="eetkamerstoel kopen")
+    
+    st.info("💡 Tip: Bij werkwoorden (zoals 'kopen') geeft 'Natuurlijk' het beste taalkundige resultaat.")
     anchor_mode = st.radio("Link Modus", ["Exact Match", "Natuurlijk/Vloeiend"])
     
     st.divider()
     st.header("🎭 Publisher & Toon")
-    tov_selection = st.selectbox("Tone of Voice", list(TOV_PROFILES.keys()))
-    publisher_info = st.text_area("Publisher Niche", value="Culinaire website met eenvoudige recepten en de biologische citroen in de hoofdrol.")
+    tov_selection = st.selectbox("Tone of Voice", list(TOV_PROFILES.keys()), index=0)
+    publisher_info = st.text_area("Publisher Niche", value="Lifestyle blog met focus op praktisch interieuradvies.")
     base_word_count = st.slider("Basis Target Woorden", CONFIG["MIN_WORDS"], CONFIG["MAX_WORDS"], 950, step=50)
     
-    start_btn = st.button("PRODUCEER USE-CASE ASSET", type="primary", use_container_width=True)
+    start_btn = st.button("PRODUCEER EXPERT ASSET", type="primary", use_container_width=True)
 
 if start_btn:
     start_time = time.time()
@@ -189,26 +182,24 @@ if start_btn:
     
     intent_tone, dynamic_target = get_intent_and_target(anchor_text, language_sel, base_word_count)
 
-    with st.status(f"🏗️ Engine start ({language_sel})...", expanded=True) as status:
+    with st.status(f"🏗️ Expert Engine start ({language_sel})...", expanded=True) as status:
         
         # 1. STRATEGIST
-        st.write("📐 Fase 1: Gebruiksmoment-Brug ontwerpen...")
+        st.write("📐 Fase 1: Expert Blueprint met harde feiten genereren...")
         strat_sys = STRATEGIST_SYSTEM.format(
             language_instruction=lang_inst, intent_tone=intent_tone, 
             tov_instruction=current_tov["instructie"], publisher_info=publisher_info, anchor=anchor_text
         )
         blueprint = json.loads(clean_json_string(call_ai(strat_sys, f"Target: {dynamic_target}w", json_mode=True)))
-        
-        st.info(f"🌉 **Thematische Brug bedacht:** {blueprint.get('use_case_bridge', 'Geen brug gedefinieerd')}")
 
         # 2. WRITER
-        st.write("🖋️ Fase 2: Schrijven met Native Dwang...")
+        st.write("🖋️ Fase 2: Schrijven met absolute Anti-Fluff dwang...")
         full_draft = ""
         sec_target = dynamic_target // len(blueprint.get("sections", [1,2,3,4]))
         
         for section in blueprint.get("sections", []):
             write_sys = WRITER_SYSTEM.format(language_instruction=lang_inst, tov_instruction=current_tov["instructie"], intent_tone=intent_tone, ban_list=ban_list_str)
-            write_prompt = f"Kop: {section.get('h2')}\nFocus: {section.get('focus')}\nFrictie: {section.get('friction')}\nTarget: {sec_target}w."
+            write_prompt = f"Kop: {section.get('h2')}\nData Punten / Feiten: {', '.join(section.get('key_points', []))}\nTarget: {sec_target}w."
             draft = call_ai(write_sys, write_prompt)
             full_draft += f"\n\n## {section.get('h2')}\n{draft}"
 
@@ -218,7 +209,7 @@ if start_btn:
             language_instruction=lang_inst, target=dynamic_target, anchor=anchor_text, 
             mode=anchor_mode, tov_instruction=current_tov["instructie"]
         )
-        raw_editor = call_ai(editor_sys, f"Smeed aaneen, let op je hoofdletters in koppen:\n{full_draft}", json_mode=True)
+        raw_editor = call_ai(editor_sys, f"Smeed aaneen, schrijf de eindconclusie en let op koppen:\n{full_draft}", json_mode=True)
         final_json = json.loads(clean_json_string(raw_editor))
 
         # --- QA & RETRY ---
@@ -257,4 +248,4 @@ if start_btn:
 
     st.markdown("---")
     st.markdown(final_json['body'])
-    st.download_button("Download Markdown (.md)", final_json['body'], file_name=f"asset_{language_sel}.md", use_container_width=True)
+    st.download_button("Download Markdown (.md)", final_json['body'], file_name=f"asset_expert_{language_sel}.md", use_container_width=True)
