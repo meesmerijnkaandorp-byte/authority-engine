@@ -5,7 +5,7 @@ import re
 import json
 
 # --- CONFIGURATIE ---
-st.set_page_config(page_title="Authority Engine v47.0 | The Uncompromised", layout="wide")
+st.set_page_config(page_title="Authority Engine v48.0 | The Array Trick", layout="wide")
 
 try:
     client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
@@ -21,10 +21,10 @@ CONFIG = {
 
 # Uitgebreide, native-level taalinstructies
 LANG_INSTRUCTIONS = {
-    "NL": "Schrijf het volledige artikel uitsluitend in professioneel, idiomatisch Nederlands op moedertaalniveau. Gebruik een vloeiende, natuurlijke en overtuigende schrijfstijl. Vermijd letterlijk vertaalde formuleringen en onnatuurlijke woordkeuze.",
-    "EN": "Write the full article exclusively in professional, idiomatic English at native level. Use a smooth, natural, expert, and persuasive writing style. Avoid translation-like wording and unnatural phrasing.",
-    "DE": "Schreiben Sie das vollständige Artikel ausschließlich in professionellem, idiomatischem Deutsch auf Muttersprachniveau. Verwenden Sie einen fließenden, natürlichen und überzeugenden Schreibstil. Vermeiden Sie wörtliche Übersetzungen.",
-    "FR": "Écrivez l'article exclusivement en français professionnel et idiomatique de niveau langue maternelle. Utilisez un style d'écriture fluide, naturel et convaincant. Évitez les formulations littérales."
+    "NL": "Schrijf het volledige artikel uitsluitend in professioneel, idiomatisch Nederlands op moedertaalniveau. Gebruik een vloeiende, natuurlijke en overtuigende schrijfstijl. Vermijd letterlijk vertaalde formuleringen.",
+    "EN": "Write the full article exclusively in professional, idiomatic English at native level. Use a smooth, natural, expert, and persuasive writing style.",
+    "DE": "Schreiben Sie das vollständige Artikel ausschließlich in professionellem, idiomatischem Deutsch auf Muttersprachniveau. Verwenden Sie einen fließenden, natürlichen und überzeugenden Schreibstil.",
+    "FR": "Écrivez l'article exclusivement en français professionnel et idiomatique de niveau langue maternelle. Utilisez un style d'écriture fluide, naturel et convaincant."
 }
 
 UNIVERSAL_BAN = [
@@ -90,90 +90,92 @@ def validate_output(text, target_url, ban_list):
         "no_bullets": not re.search(r'(?m)^[-*]\s', text)
     }
 
-# --- ONGECOMPROMITTEERDE SYSTEM PROMPTS (v47.0) ---
+def get_fallback_sentence(language, anchor_text, target_url):
+    """Zorgt voor een ijzersterke fallback als de AI de link alsnog vergeet."""
+    if language == "NL": return f"Meer praktische informatie en opties voor een [{anchor_text}]({target_url}) vind je bij de gespecialiseerde aanbieder."
+    if language == "EN": return f"For more practical information and options regarding a [{anchor_text}]({target_url}), consult a specialized provider."
+    if language == "DE": return f"Weitere praktische Informationen und Optionen für ein [{anchor_text}]({target_url}) finden Sie beim Fachanbieter."
+    if language == "FR": return f"Pour plus d'informations pratiques et d'options concernant un [{anchor_text}]({target_url}), consultez un fournisseur spécialisé."
+    return f"Meer informatie: [{anchor_text}]({target_url})."
 
-STRATEGIST_SYSTEM = """Jij bent een Meesterlijke Content Architect en Hoofdredacteur. Je ontwerpt hoogwaardige, redactionele artikelen die mijlenver uitstijgen boven standaard SEO-content.
-Jouw doel is om een feilloze, psychologische brug te slaan tussen de niche van de publisher en de uiteindelijke commerciële behoefte van de lezer.
+# --- ONGECOMPROMITTEERDE SYSTEM PROMPTS (v48.0) ---
 
+STRATEGIST_SYSTEM = """Jij bent een Meesterlijke Content Architect.
 TAAL: {language_instruction}
 TONE OF VOICE: {tov_instruction}
-INTENTIE VAN HET ARTIKEL: {intent_tone}
+INTENTIE: {intent_tone}
 
-JOUW TAKEN EN REGELS:
-1. DE USE-CASE BRUG: Bouw geen theorie, maar een contextueel gebruiksmoment. Hoe gebruikt de lezer van {publisher_info} het product ({anchor}) fysiek in de praktijk? Verbind de sfeer van de publisher logisch aan het gebruik van het product.
-2. EXPERT DATA: Bedenk per hoofdstuk 3 snoeiharde, concrete datapunten, vuistregels, afmetingen of materiaalkenmerken. Vermijd open deuren ("comfort is belangrijk"). Geef antwoorden ("kies een zithoogte van 45cm").
-3. STRUCTUUR: Plan 4 tot 5 secties. Iedere sectie behandelt een UNIEK aspect. Geen herhaling van de conclusie in eerdere secties.
-4. KOPPEN FORMAT: Gebruik uitsluitend 'Sentence case' voor alle koppen (Alleen het allereerste woord krijgt een hoofdletter). Geef de koppen actiegerichte en specifieke titels, vermijd abstracte termen.
-5. FORMAT: Je levert UITSLUITEND een geldig JSON object.
+JOUW TAKEN:
+1. DE USE-CASE BRUG: Bouw een contextueel gebruiksmoment. Hoe gebruikt de lezer van {publisher_info} het product ({anchor}) fysiek in de praktijk? Verbind de publisher logisch aan het product.
+2. EXPERT DATA: Bedenk per hoofdstuk 3 snoeiharde, concrete datapunten (afmetingen, materialen). 
+3. STRUCTUUR: Plan 4 tot 5 secties. 
+4. KOPPEN: Gebruik uitsluitend 'Sentence case' voor alle koppen.
 
 SCHEMA:
 {{
-  "title": "Sterke, redactionele kop (Sentence case)",
-  "use_case_bridge": "Jouw psychologische en praktische brug tussen publisher en product.",
+  "title": "Sterke kop (Sentence case)",
+  "use_case_bridge": "Jouw psychologische brug tussen publisher en product.",
   "sections": [
     {{ 
-      "h2": "Specifieke tussenkop in sentence case", 
+      "h2": "Tussenkop in sentence case", 
       "key_points": ["Hard feit 1", "Diepgaand inzicht 2", "Vuistregel 3"],
-      "friction": "Welk specifiek, herkenbaar probleem lossen we hier op?"
+      "friction": "Welk specifiek probleem lossen we hier op?"
     }}
   ]
 }}"""
 
-WRITER_SYSTEM = """Jij bent een Award-Winning Senior Vakjournalist. Je schrijft teksten die publicatie-klaar zijn voor premium platformen.
-Je weigert generieke AI-taal ("fluff") te gebruiken en vult je tekst uitsluitend met waarde, details en expertise.
-
+WRITER_SYSTEM = """Jij bent een Award-Winning Senior Vakjournalist. 
 TAAL: {language_instruction}
 STIJL: {tov_instruction} 
 FOCUS: {intent_tone}
 
 JOUW SCHRIJFWETTEN (NEGEER DEZE NOOIT):
-1. VLOEIEND EN MENSELIJK: Gebruik een rijke, gevarieerde zinsopbouw. Schrijf met de "zaterdagmorgen-energie": nuchter, tastbaar en direct.
-2. ABSOLUUT VERBOD OP OPSOMMINGEN: Gebruik GEEN ENKELE bulletpoint, geen streepjes en geen genummerde lijsten. Alles moet worden geschreven in samenhangende, lopende alinea's. 
-3. GEEN WOLLIGE INLEIDINGEN: Vermijd zinnen als "In de wereld van vandaag..." of "Stel je voor...". Val direct met de deur in huis met een observatie of feit.
-4. GEEN MINI-CONCLUSIES: Sluit je hoofdstuk niet af met een samenvatting (zoals "Kortom, let goed op je keuze"). Rond je alinea af en stop.
-5. GEBRUIK DE DATA: Verwerk de meegeleverde 'key_points' op een natuurlijke, redactionele manier in de tekst. Laat zien dat je de expert bent.
-6. VERBODEN WOORDEN: Vermijd koste wat kost de volgende termen: {ban_list}.
+1. ABSOLUTE LENGTE-EIS: Je MOET minimaal {sec_target} woorden schrijven per sectie. Gebruik zeer diepgaande voorbeelden en werk de datapunten volledig uit om deze lengte te halen.
+2. VLOEIEND EN MENSELIJK: Nuchter, direct. GEEN inleidingen zoals "Stel je voor...".
+3. ABSOLUUT VERBOD OP OPSOMMINGEN: Gebruik GEEN ENKELE bulletpoint of genummerde lijst. 
+4. GEEN MINI-CONCLUSIES: Sluit je hoofdstuk niet af met een samenvatting.
+5. VERBODEN WOORDEN: Vermijd: {ban_list}.
 
-Schrijf uitsluitend de tekst voor het aangegeven hoofdstuk. Gebruik Markdown voor de H2 kop en maak **kernwoorden** incidenteel vetgedrukt voor scannability."""
+Schrijf uitsluitend de tekst voor het aangegeven hoofdstuk."""
 
-EDITOR_SYSTEM = """Jij bent de Meedogenloze Eindredacteur en Assembleur. Jij bent de laatste kwaliteitscontroleur voordat het artikel naar de drukker gaat.
+EDITOR_SYSTEM = """Jij bent de Assembleur. Jij plakt teksten woord-voor-woord aan elkaar.
 Je levert UITSLUITEND JSON.
 
 TAAL: {language_instruction}
-VERBODEN WOORDEN CHECK: Zorg dat deze woorden NOOIT in de tekst voorkomen: {ban_list}.
+VERBODEN WOORDEN: Zorg dat deze woorden NOOIT in de tekst voorkomen: {ban_list}.
 
 JOUW TAKEN (ABSOLUTE PRIORITEIT):
-1. NIET SAMENVATTEN OF INKORTEN: Plak de aangeleverde hoofdstukken integraal aan elkaar. Jouw doel is een LANG en VOLLEDIG artikel van circa {target} woorden. Vernietig geen werk van de schrijver.
-2. KOPPEN CONTROLE: Controleer streng of alle koppen (H1 en H2) in 'Sentence case' staan. Er mogen GEEN Koppen Zijn Waarbij Elk Woord Een Hoofdletter Heeft.
-3. BULLET-SWEEP: Als de schrijver per ongeluk toch een bulletpoint (-) of opsomming heeft gemaakt, schrijf jij deze subiet om naar een lopende, grammaticale alinea.
-4. DE ANKERTEKST CHIRURGIE ({mode}): Je plaatst EXACT ÉÉN KEER de marker [ANCHOR_SPOT] in de tekst, bedoeld voor de term '{anchor}'.
-   - Bij 'Exact Match': De tekst eromheen MOET zich plooien naar de ankertekst, niet andersom. Als het anker een infinitief is (bijv. 'eetkamerstoel kopen'), gebruik dan vluchtstrook-sjablonen zoals: "Wanneer je overweegt tot [ANCHOR_SPOT]...", "In het proces van [ANCHOR_SPOT] merken we dat...", of "Wie zoekt naar [ANCHOR_SPOT] moet letten op...". De zin moet 100% foutloos Nederlands zijn.
-   - Bij 'Natuurlijk/Vloeiend': Verbuig het anker, maak het meervoud of voeg lidwoorden toe zodat het onzichtbaar opgaat in de flow.
-5. DE FINALE CONCLUSIE: Voeg aan het einde van de body een gloednieuwe, krachtige laatste alinea toe die het artikel samenvat met een helder (koop)advies.
-
-VOORDAT JE DE BODY SCHRIJFT:
-Vul het veld `anchor_sentence_check` in met de geplande zin waarin de ankertekst voorkomt en beoordeel zelf kritisch of deze zin grammaticaal perfect is.
+1. NIET SAMENVATTEN OF INKORTEN (CRUCIAAL): Je kopieert de aangeleverde hoofdstukken integraal in de JSON array `assembled_sections`. Je mag GEEN ENKELE zin weglaten. Het artikel moet LANG blijven.
+2. KOPPEN CONTROLE: Controleer of alle koppen in 'Sentence case' staan.
+3. BULLET-SWEEP: Als de schrijver een bulletpoint heeft gemaakt, schrijf jij deze om naar een alinea.
+4. DE ANKERTEKST ({mode}): Plaats EXACT ÉÉN KEER de marker [ANCHOR_SPOT] ergens in één van de secties voor de term '{anchor}'. 
+   - Bij 'Exact Match': Gebruik vluchtstrook-sjablonen ("Wanneer je overweegt tot [ANCHOR_SPOT]...") als de term onhandig is. Het moet 100% foutloos zijn.
+   - Bij 'Natuurlijk/Vloeiend': Verbuig het anker naar wens.
+5. CONCLUSIE: Schrijf een nieuwe, krachtige alinea in het veld `conclusion` met een helder koopadvies.
 
 SCHEMA:
 {{
-  "title": "Definitieve kop in sentence case", 
-  "meta": "SEO-geoptimaliseerde meta description van max 155 tekens", 
-  "slug": "url-slug-in-kebab-case", 
-  "anchor_sentence_check": "Schrijf de zin met de [ANCHOR_SPOT] hier uit en valideer de grammatica.",
-  "body": "## Tussenkop\\n\\nVolledige, ongecensureerde tekst van hoofdstuk 1...\\n\\n## Volgende kop\\n\\nVolledige tekst van hoofdstuk 2, met precies één [ANCHOR_SPOT]..."
+  "title": "Kop in sentence case", 
+  "meta": "SEO meta description van max 155 tekens", 
+  "slug": "url-slug", 
+  "anchor_sentence_check": "Schrijf de zin met de [ANCHOR_SPOT] uit ter validatie.",
+  "assembled_sections": [
+    "## Kop 1\\n\\n[Volledige gekopieerde tekst van hoofdstuk 1]",
+    "## Kop 2\\n\\n[Volledige gekopieerde tekst van hoofdstuk 2 met de [ANCHOR_SPOT]]"
+  ],
+  "conclusion": "## Conclusie\\n\\nKrachtige afsluiting..."
 }}"""
 
-RETRY_EDITOR_SYSTEM = """Jij bent de Strenge Eindredacteur. JE VORIGE WERK WERD AFGEKEURD DOOR DE QA SYSTEMEN.
-Je hebt waarschijnlijk de tekst drastisch samengevat (te kort), bulletpoints gebruikt, of verboden woorden (zoals essentieel/cruciaal) laten staan.
+RETRY_EDITOR_SYSTEM = """Jij bent de Assembleur. JE VORIGE WERK WERD AFGEKEURD!
+Je hebt de tekst samengevat (te kort), bullets gebruikt of de link vergeten.
 
 HERSTELOPDRACHT:
-1. Neem de originele teksten en plak ze aan elkaar zonder ze in te korten! Het artikel moet lang en diepgaand zijn.
+1. KOPIEER de teksten integraal in de array `assembled_sections`. NIET INKORTEN!
 2. Herschrijf elke opsomming naar lopende zinnen.
-3. Gebruik 'Sentence case' voor alle koppen.
-4. Plaats de [ANCHOR_SPOT] in een foutloze zin.
-5. Vermijd deze woorden absoluut: {ban_list}.
+3. Plaats de [ANCHOR_SPOT] in een foutloze zin.
+4. Vermijd deze woorden: {ban_list}.
 
-Lever UITSLUITEND JSON (title, meta, slug, anchor_sentence_check, body)."""
+Lever UITSLUITEND JSON (title, meta, slug, anchor_sentence_check, assembled_sections, conclusion)."""
 
 # --- AI WRAPPER ---
 def call_ai(system, prompt, temp=0.7, json_mode=False):
@@ -186,16 +188,14 @@ def call_ai(system, prompt, temp=0.7, json_mode=False):
     return response.choices[0].message.content
 
 # --- UI INTERFACE ---
-st.title("🛡️ Authority Engine v47.0")
-st.caption("The Uncompromised Engine | Maximale instructie-diepte voor superieure output")
+st.title("🛡️ Authority Engine v48.0")
+st.caption("The Array Trick & Iron Fallback | Absolute Garantie op Lengte en Link")
 
 with st.sidebar:
     st.header("📋 Setup & Locatie")
     language_sel = st.selectbox("Taal", ["NL", "EN", "DE", "FR"])
     target_url = st.text_input("URL", value="https://www.vidaxl.nl/g/6064/eetkamerstoelen")
     anchor_text = st.text_input("Ankertekst", value="eetkamerstoel kopen")
-    
-    st.info("💡 Tip: Bij werkwoorden (zoals 'kopen') geeft 'Natuurlijk' het beste taalkundige resultaat.")
     anchor_mode = st.radio("Link Modus", ["Exact Match", "Natuurlijk/Vloeiend"])
     
     st.divider()
@@ -217,66 +217,67 @@ if start_btn:
     with st.status(f"🏗️ Engine start ({language_sel}) - Target: {dynamic_target}w...", expanded=True) as status:
         
         # 1. STRATEGIST
-        st.write("📐 Fase 1: Diepgaande Blueprint genereren...")
+        st.write("📐 Fase 1: Blueprint genereren...")
         strat_sys = STRATEGIST_SYSTEM.format(
-            language_instruction=lang_inst,
-            tov_instruction=current_tov["instructie"],
-            intent_tone=intent_tone,
-            publisher_info=publisher_info, 
-            anchor=anchor_text
+            language_instruction=lang_inst, tov_instruction=current_tov["instructie"],
+            intent_tone=intent_tone, publisher_info=publisher_info, anchor=anchor_text
         )
-        blueprint = json.loads(clean_json_string(call_ai(strat_sys, f"Ontwerp het artikel. Target: {dynamic_target}w", json_mode=True)))
-
-        st.info(f"🌉 **Bedachte Brug:** {blueprint.get('use_case_bridge', 'Niet gevonden')}")
-
+        blueprint = json.loads(clean_json_string(call_ai(strat_sys, f"Target: {dynamic_target}w", json_mode=True)))
+        
         # 2. WRITER
-        st.write("🖋️ Fase 2: Schrijven met maximale detail-dwang...")
+        st.write("🖋️ Fase 2: Schrijven met lengte-dwang...")
         full_draft = ""
         sec_target = dynamic_target // max(1, len(blueprint.get("sections", [1,2,3,4])))
         
         for section in blueprint.get("sections", []):
             write_sys = WRITER_SYSTEM.format(
                 language_instruction=lang_inst, tov_instruction=current_tov["instructie"], 
-                intent_tone=intent_tone, ban_list=ban_list_str
+                intent_tone=intent_tone, ban_list=ban_list_str, sec_target=sec_target
             )
-            write_prompt = f"Kop: {section.get('h2')}\nData Punten om te verwerken: {', '.join(section.get('key_points', []))}\nFrictie: {section.get('friction')}\nTarget: {sec_target}w."
+            write_prompt = f"Kop: {section.get('h2')}\nData Punten om te verwerken: {', '.join(section.get('key_points', []))}\nFrictie: {section.get('friction')}"
             draft = call_ai(write_sys, write_prompt)
-            full_draft += f"\n\n## {section.get('h2')}\n{draft}"
+            full_draft += f"## {section.get('h2')}\n{draft}\n\n"
 
         # 3. EDITOR
-        st.write("✨ Fase 3: Assembleren (Met strikt verbod op inkorten!)...")
+        st.write("✨ Fase 3: Assembleren (Via JSON Array Trick)...")
         editor_sys = EDITOR_SYSTEM.format(
             language_instruction=lang_inst, target=dynamic_target, anchor=anchor_text, 
             mode=anchor_mode, ban_list=ban_list_str
         )
-        raw_editor = call_ai(editor_sys, f"Assembleer dit exact, integreer [ANCHOR_SPOT] en voeg de eindconclusie toe:\n{full_draft}", json_mode=True)
+        raw_editor = call_ai(editor_sys, f"Kopieer secties in de array en integreer de [ANCHOR_SPOT]:\n{full_draft}", json_mode=True)
         final_json = json.loads(clean_json_string(raw_editor))
 
-        # --- QA & RETRY ---
-        qa_result = validate_output(final_json.get("body", ""), target_url, current_tov["ban"])
-        word_count_check = count_words(final_json.get("body", ""))
+        # Reconstruct body from the Array
+        assembled_body = "\n\n".join(final_json.get("assembled_sections", []))
+        assembled_body += f"\n\n{final_json.get('conclusion', '')}"
         
-        if (not qa_result["no_bullets"] or qa_result["ban_words_found"] or word_count_check < (dynamic_target * 0.5)) and CONFIG["ENABLE_RETRY_ON_QA_FAIL"]:
+        # --- QA & RETRY ---
+        qa_result = validate_output(assembled_body, target_url, current_tov["ban"])
+        word_count_check = count_words(assembled_body)
+        
+        if (not qa_result["no_bullets"] or qa_result["ban_words_found"] or word_count_check < (dynamic_target * 0.6)) and CONFIG["ENABLE_RETRY_ON_QA_FAIL"]:
             st.warning(f"⚠️ QA Faalde (Bullets, Ban-words of veel te kort: {word_count_check}w). Strenge Retry wordt gestart...")
             retry_sys = RETRY_EDITOR_SYSTEM.format(lang_code=language_sel, ban_list=ban_list_str)
-            raw_retry = call_ai(retry_sys, f"Hier is de originele ruwe tekst. Maak hier een LANG en FOUTLOOS eindproduct van:\n{full_draft}", temp=0.4, json_mode=True)
-            final_json = json.loads(clean_json_string(raw_retry))
+            raw_retry = call_ai(retry_sys, f"Ruwe tekst om correct te assembleren (niet inkorten!):\n{full_draft}", temp=0.4, json_mode=True)
+            retry_json = json.loads(clean_json_string(raw_retry))
+            assembled_body = "\n\n".join(retry_json.get("assembled_sections", [])) + f"\n\n{retry_json.get('conclusion', '')}"
+            final_json.update(retry_json)
             st.success("✅ Retry afgerond.")
 
-        # 4. PYTHON LINK INJECTION
-        body = final_json.get("body", "")
-        if "[ANCHOR_SPOT]" in body:
-            body = body.replace("[ANCHOR_SPOT]", f"[{anchor_text}]({target_url})", 1)
-            body = body.replace("[ANCHOR_SPOT]", anchor_text)
+        # 4. PYTHON LINK INJECTION & IRON FALLBACK
+        if "[ANCHOR_SPOT]" in assembled_body:
+            assembled_body = assembled_body.replace("[ANCHOR_SPOT]", f"[{anchor_text}]({target_url})", 1)
+            assembled_body = assembled_body.replace("[ANCHOR_SPOT]", anchor_text)
+        elif re.search(re.escape(anchor_text), assembled_body, re.IGNORECASE):
+            assembled_body = re.sub(re.escape(anchor_text), f"[{anchor_text}]({target_url})", assembled_body, count=1, flags=re.IGNORECASE)
         else:
-            pattern = re.compile(re.escape(anchor_text), re.IGNORECASE)
-            body = pattern.sub(f"[{anchor_text}]({target_url})", body, count=1)
-        
-        final_json["body"] = cleanup_text(body)
-        
+            # IRONCLAD FALLBACK: AI compleet gefaald? Python redt de link.
+            fallback_str = get_fallback_sentence(language_sel, anchor_text, target_url)
+            assembled_body += f"\n\n{fallback_str}"
+            st.info("💡 Systeem ingreep: AI negeerde de ankertekst. Geforceerde linguïstische fallback toegepast.")
+
+        final_json["body"] = cleanup_text(assembled_body)
         qa_final = validate_output(final_json['body'], target_url, current_tov["ban"])
-        if not qa_final["link_present"]:
-            st.error("Kritieke fout: Ankertekst kon niet worden geplaatst.")
         
         status.update(label=f"✅ Content Ready in {int(time.time() - start_time)}s", state="complete")
 
@@ -286,11 +287,11 @@ if start_btn:
     col1, col2, col3, col4 = st.columns(4)
     final_wc = count_words(final_json['body'])
     col1.metric("Volume", f"{final_wc} w", delta=final_wc - dynamic_target)
-    col2.metric("Link", "✅ Aanwezig" if qa_final["link_present"] else "❌ Ontbreekt")
+    col2.metric("Link", "✅ Aanwezig" if qa_final["link_present"] else "❌ FOUT")
     col3.metric("Bullet-Vrij", "✅ Ja" if qa_final['no_bullets'] else "❌ Nee")
-    col4.metric("Ban-List", "✅ Schoon" if not qa_final['ban_words_found'] else f"❌ Fout ({len(qa_final['ban_words_found'])})")
+    col4.metric("Ban-List", "✅ Schoon" if not qa_final['ban_words_found'] else f"❌ Fout")
 
-    st.info(f"🔍 **AI Grammatica Check:** {final_json.get('anchor_sentence_check', 'Niet gevonden')}")
+    st.info(f"🔍 **AI Grammatica Check:** {final_json.get('anchor_sentence_check', 'Fallback toegepast door systeem')}")
 
     st.markdown("---")
     st.markdown(final_json['body'])
