@@ -5,7 +5,7 @@ import re
 import json
 
 # --- CONFIGURATIE ---
-st.set_page_config(page_title="Authority Engine v43.0 | The Quality Lock", layout="wide")
+st.set_page_config(page_title="Authority Engine v44.0 | Use-Case Weaver", layout="wide")
 
 try:
     client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
@@ -22,7 +22,7 @@ CONFIG = {
 
 # --- TAAL INSTRUCTIES ---
 LANG_INSTRUCTIONS = {
-    "NL": "Schrijf uitsluitend in foutloos, idiomatisch Nederlands.",
+    "NL": "Schrijf uitsluitend in foutloos, idiomatisch Nederlands op moedertaalniveau.",
     "EN": "Write exclusively in professional, native-level English.",
     "DE": "Schreiben Sie ausschließlich in fehlerfreiem, muttersprachlichem Deutsch.",
     "FR": "Écrivez exclusivement en français idiomatique et sans fautes."
@@ -33,15 +33,15 @@ UNIVERSAL_BAN = ["oase", "essentieel", "cruciaal", "wereld van verschil", "esthe
 
 TOV_PROFILES = {
     "Verhalend/Lifestyle": {
-        "instructie": "Schrijf nuchter, beschouwend en verhalend. Focus op menselijke ervaring en concrete details.",
+        "instructie": "Schrijf nuchter, beschouwend en verhalend. Focus op menselijke ervaring en concrete details in het dagelijks leven.",
         "ban": UNIVERSAL_BAN + ["synergie", "optimaliseren", "implementeren"]
     },
     "Zakelijk/Technisch": {
-        "instructie": "Schrijf professioneel, analytisch en objectief. Focus op harde specificaties en praktische bruikbaarheid.",
+        "instructie": "Schrijf professioneel, analytisch en objectief. Focus op harde specificaties, bruikbaarheid en zakelijke context.",
         "ban": UNIVERSAL_BAN + ["gevoel", "beleving", "magisch", "passie", "droom"]
     },
     "Direct/Nieuwsachtig": {
-        "instructie": "Schrijf kort, to-the-point, feitelijk en urgent. Wars van marketingtaal.",
+        "instructie": "Schrijf kort, to-the-point, feitelijk en urgent. Wars van trage inleidingen en marketingtaal.",
         "ban": UNIVERSAL_BAN + ["uniek", "ontdek", "adembenemend", "sfeervol"]
     }
 }
@@ -87,12 +87,18 @@ def validate_output(text, ban_list):
         "no_bullets": not re.search(r'(?m)^[-*]\s', text)
     }
 
-# --- SYSTEM PROMPTS (v43.0 - The Quality Lock) ---
+# --- SYSTEM PROMPTS (v44.0 - Use-Case Weaver) ---
 
 STRATEGIST_SYSTEM = """Jij bent een Hoofdredacteur. Je levert UITSLUITEND JSON.
 TAAL: {language_instruction}
-TAAK: Ontwerp een essay-structuur die start bij de publisher ({publisher_info}) en eindigt bij het onderwerp {anchor}.
-STIJL-INSTRUCTIE: {tov_instruction}
+
+BRUG-STRATEGIE (CRUCIAAL):
+Bouw GEEN abstracte theorie (bijv. 'duurzaamheid is belangrijk in auto's en ook in bestek'). 
+Bouw de brug via een PRAKTISCH GEBRUIKSMOMENT.
+Vraag jezelf af: Hoe gebruikt de lezer van de publisher ({publisher_info}) het product ({anchor}) in de praktijk?
+- Kooksite -> Eetkamerstoel = Urenlang tafelen en gasten ontvangen na het koken.
+- Finance site -> Laptop = De thuisadministratie op orde brengen aan de keukentafel.
+- Travel blog -> Kledingkast = Koffers uitpakken en vakantiekleding opbergen.
 
 STRICTE EISEN: 
 - Plan uitsluitend LOPENDE alinea's. GEEN bulletpoints.
@@ -101,6 +107,7 @@ STRICTE EISEN:
 SCHEMA:
 {{
   "title": "Pakkende kop (in sentence case)",
+  "use_case_bridge": "Beschrijf in 1 zin de praktische, fysieke brug tussen de publisher en het product.",
   "sections": [ {{ "h2": "Kop in sentence case", "focus": "Focus", "friction": "Het probleem" }} ]
 }}"""
 
@@ -120,21 +127,21 @@ TAAK: Smeed de hoofdstukken aaneen tot een naadloos geheel van ca. {target} woor
 LINK-STRATEGIE ({mode}):
 Ankertekst: '{anchor}'
 Plaats exact 1x de marker [ANCHOR_SPOT] in de tekst.
-- Exact Match: De zin MOET grammaticaal foutloos zijn als je exact de woorden '{anchor}' invult. Gebruik sjablonen zoals: 
-  "Een [ANCHOR_SPOT] doe je niet zomaar...", 
-  "Online een [ANCHOR_SPOT] wordt steeds populairder...", 
-  "In de zoektocht naar de perfecte inrichting is een [ANCHOR_SPOT] vaak de laatste stap."
-- Natuurlijk: Verbuig de term (bijv. meervoud, of voeg lidwoorden toe) zodat het 100% natuurlijk klinkt.
+De ankertekst moet logisch landen in het gebruiksmoment van de lezer. Het mag nooit klinken als een plotselinge theorie of advertentie.
+
+- Exact Match: De zin MOET grammaticaal foutloos zijn als je exact de woorden '{anchor}' invult. 
+  Sjablonen: "Een [ANCHOR_SPOT] doe je vaak als...", "Online een [ANCHOR_SPOT] voorkomt dat...", "Bij de overweging tot een [ANCHOR_SPOT]...".
+- Natuurlijk: Verbuig de term (bijv. meervoud of lidwoorden) zodat het 100% natuurlijk en menselijk klinkt.
 
 KWALITEITSCONTROLE:
-Voordat je de body schrijft, vul je het veld "anchor_sentence_check" in. Schrijf hier de exacte zin op en controleer of dit écht een goedlopende Nederlandse zin is.
+Voordat je de body schrijft, vul je het veld "anchor_sentence_check" in. Schrijf hier de exacte zin op en valideer de grammatica.
 
 SCHEMA:
 {{
   "title": "Definitieve kop in sentence case", 
   "meta": "Meta description", 
   "slug": "url-slug", 
-  "anchor_sentence_check": "Schrijf hier de exacte zin met de ankertekst en valideer de grammatica",
+  "anchor_sentence_check": "De exacte zin met de ankertekst ter controle",
   "body": "## Tussenkop in sentence case\\n\\nTekst met de kloppende [ANCHOR_SPOT] zin..."
 }}"""
 
@@ -156,8 +163,8 @@ def call_ai(system, prompt, temp=0.7, json_mode=False):
     return response.choices[0].message.content
 
 # --- UI INTERFACE ---
-st.title("🛡️ Authority Engine v43.0")
-st.caption("The Quality Lock | Geforceerde Grammatica Controle")
+st.title("🛡️ Authority Engine v44.0")
+st.caption("The Use-Case Weaver | Natuurlijke context-bruggen voor elke niche")
 
 with st.sidebar:
     st.header("📋 Setup & Locatie")
@@ -172,7 +179,7 @@ with st.sidebar:
     publisher_info = st.text_area("Publisher Niche", value="Culinaire website met eenvoudige recepten en de biologische citroen in de hoofdrol.")
     base_word_count = st.slider("Basis Target Woorden", CONFIG["MIN_WORDS"], CONFIG["MAX_WORDS"], 950, step=50)
     
-    start_btn = st.button("PRODUCEER KWALITEITS ASSET", type="primary", use_container_width=True)
+    start_btn = st.button("PRODUCEER USE-CASE ASSET", type="primary", use_container_width=True)
 
 if start_btn:
     start_time = time.time()
@@ -185,12 +192,14 @@ if start_btn:
     with st.status(f"🏗️ Engine start ({language_sel})...", expanded=True) as status:
         
         # 1. STRATEGIST
-        st.write("📐 Fase 1: Structuur bouwen...")
+        st.write("📐 Fase 1: Gebruiksmoment-Brug ontwerpen...")
         strat_sys = STRATEGIST_SYSTEM.format(
             language_instruction=lang_inst, intent_tone=intent_tone, 
             tov_instruction=current_tov["instructie"], publisher_info=publisher_info, anchor=anchor_text
         )
         blueprint = json.loads(clean_json_string(call_ai(strat_sys, f"Target: {dynamic_target}w", json_mode=True)))
+        
+        st.info(f"🌉 **Thematische Brug bedacht:** {blueprint.get('use_case_bridge', 'Geen brug gedefinieerd')}")
 
         # 2. WRITER
         st.write("🖋️ Fase 2: Schrijven met Native Dwang...")
@@ -244,7 +253,6 @@ if start_btn:
     col3.metric("Bullet-Vrij", "✅ Ja" if qa_final['no_bullets'] else "❌ Nee")
     col4.metric("Ban-List", "✅ Schoon" if not qa_final['ban_words_found'] else f"❌ Fout")
 
-    # DE NIEUWE KWALITEITSCHECK ZICHTBAAR MAKEN
     st.info(f"🔍 **AI Grammatica Check:** {final_json.get('anchor_sentence_check', 'Niet gevonden')}")
 
     st.markdown("---")
