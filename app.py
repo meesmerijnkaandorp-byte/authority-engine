@@ -5,7 +5,7 @@ import re
 import json
 
 # --- CONFIGURATIE ---
-st.set_page_config(page_title="Authority Engine v48.0 | The Array Trick", layout="wide")
+st.set_page_config(page_title="Authority Engine v48.1 | The JSON Fix", layout="wide")
 
 try:
     client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
@@ -43,7 +43,7 @@ TOV_PROFILES = {
         "ban": UNIVERSAL_BAN + ["synergie", "optimaliseren", "implementeren", "efficiëntie"]
     },
     "Zakelijk/Technisch": {
-        "instructie": "Schrijf professioneel, analytisch, B2B-gericht en objectief. Focus op harde specificaties, kosten, ROI, duurzaamheid in productie en praktische bruikbaarheid voor professionals. De tekst moet klinken als een whitepaper of een vakblad.",
+        "instructie": "Schrijf professioneel, analytisch, B2B-gericht en objectief. Focus op harde specificaties, kosten, ROI, duurzaamheid in productie en praktische bruikbaarheid voor professionals. De tekst moet klinken als ein whitepaper of een vakblad.",
         "ban": UNIVERSAL_BAN + ["gevoel", "beleving", "passie", "thuis", "knus"]
     }
 }
@@ -98,9 +98,9 @@ def get_fallback_sentence(language, anchor_text, target_url):
     if language == "FR": return f"Pour plus d'informations pratiques et d'options concernant un [{anchor_text}]({target_url}), consultez un fournisseur spécialisé."
     return f"Meer informatie: [{anchor_text}]({target_url})."
 
-# --- ONGECOMPROMITTEERDE SYSTEM PROMPTS (v48.0) ---
+# --- ONGECOMPROMITTEERDE SYSTEM PROMPTS (v48.1) ---
 
-STRATEGIST_SYSTEM = """Jij bent een Meesterlijke Content Architect.
+STRATEGIST_SYSTEM = """Jij bent een Meesterlijke Content Architect. Je levert UITSLUITEND JSON.
 TAAL: {language_instruction}
 TONE OF VOICE: {tov_instruction}
 INTENTIE: {intent_tone}
@@ -111,7 +111,7 @@ JOUW TAKEN:
 3. STRUCTUUR: Plan 4 tot 5 secties. 
 4. KOPPEN: Gebruik uitsluitend 'Sentence case' voor alle koppen.
 
-SCHEMA:
+SCHEMA (VERPLICHTE JSON):
 {{
   "title": "Sterke kop (Sentence case)",
   "use_case_bridge": "Jouw psychologische brug tussen publisher en product.",
@@ -153,7 +153,7 @@ JOUW TAKEN (ABSOLUTE PRIORITEIT):
    - Bij 'Natuurlijk/Vloeiend': Verbuig het anker naar wens.
 5. CONCLUSIE: Schrijf een nieuwe, krachtige alinea in het veld `conclusion` met een helder koopadvies.
 
-SCHEMA:
+SCHEMA (VERPLICHTE JSON):
 {{
   "title": "Kop in sentence case", 
   "meta": "SEO meta description van max 155 tekens", 
@@ -166,11 +166,11 @@ SCHEMA:
   "conclusion": "## Conclusie\\n\\nKrachtige afsluiting..."
 }}"""
 
-RETRY_EDITOR_SYSTEM = """Jij bent de Assembleur. JE VORIGE WERK WERD AFGEKEURD!
+RETRY_EDITOR_SYSTEM = """Jij bent de Assembleur. JE VORIGE WERK WERD AFGEKEURD! Je levert UITSLUITEND JSON.
 Je hebt de tekst samengevat (te kort), bullets gebruikt of de link vergeten.
 
 HERSTELOPDRACHT:
-1. KOPIEER de teksten integraal in de array `assembled_sections`. NIET INKORTEN!
+1. KOPIEER de teksten integraal in de JSON array `assembled_sections`. NIET INKORTEN!
 2. Herschrijf elke opsomming naar lopende zinnen.
 3. Plaats de [ANCHOR_SPOT] in een foutloze zin.
 4. Vermijd deze woorden: {ban_list}.
@@ -188,8 +188,8 @@ def call_ai(system, prompt, temp=0.7, json_mode=False):
     return response.choices[0].message.content
 
 # --- UI INTERFACE ---
-st.title("🛡️ Authority Engine v48.0")
-st.caption("The Array Trick & Iron Fallback | Absolute Garantie op Lengte en Link")
+st.title("🛡️ Authority Engine v48.1")
+st.caption("The Array Trick & Iron Fallback | Bugfix & Absolute Garantie op Lengte")
 
 with st.sidebar:
     st.header("📋 Setup & Locatie")
@@ -222,7 +222,14 @@ if start_btn:
             language_instruction=lang_inst, tov_instruction=current_tov["instructie"],
             intent_tone=intent_tone, publisher_info=publisher_info, anchor=anchor_text
         )
-        blueprint = json.loads(clean_json_string(call_ai(strat_sys, f"Target: {dynamic_target}w", json_mode=True)))
+        
+        raw_strat = call_ai(strat_sys, f"Target: {dynamic_target}w", json_mode=True)
+        try:
+            blueprint = json.loads(clean_json_string(raw_strat))
+        except Exception as e:
+            st.error("Kritieke fout: Blueprint leverde geen geldige JSON.")
+            st.code(raw_strat)
+            st.stop()
         
         # 2. WRITER
         st.write("🖋️ Fase 2: Schrijven met lengte-dwang...")
@@ -245,7 +252,13 @@ if start_btn:
             mode=anchor_mode, ban_list=ban_list_str
         )
         raw_editor = call_ai(editor_sys, f"Kopieer secties in de array en integreer de [ANCHOR_SPOT]:\n{full_draft}", json_mode=True)
-        final_json = json.loads(clean_json_string(raw_editor))
+        
+        try:
+            final_json = json.loads(clean_json_string(raw_editor))
+        except Exception as e:
+            st.error("Kritieke fout: Editor leverde geen geldige JSON.")
+            st.code(raw_editor)
+            st.stop()
 
         # Reconstruct body from the Array
         assembled_body = "\n\n".join(final_json.get("assembled_sections", []))
@@ -256,13 +269,16 @@ if start_btn:
         word_count_check = count_words(assembled_body)
         
         if (not qa_result["no_bullets"] or qa_result["ban_words_found"] or word_count_check < (dynamic_target * 0.6)) and CONFIG["ENABLE_RETRY_ON_QA_FAIL"]:
-            st.warning(f"⚠️ QA Faalde (Bullets, Ban-words of veel te kort: {word_count_check}w). Strenge Retry wordt gestart...")
+            st.warning(f"⚠️ QA Faalde (Bullets, Ban-words of te kort: {word_count_check}w). Strenge Retry wordt gestart...")
             retry_sys = RETRY_EDITOR_SYSTEM.format(lang_code=language_sel, ban_list=ban_list_str)
             raw_retry = call_ai(retry_sys, f"Ruwe tekst om correct te assembleren (niet inkorten!):\n{full_draft}", temp=0.4, json_mode=True)
-            retry_json = json.loads(clean_json_string(raw_retry))
-            assembled_body = "\n\n".join(retry_json.get("assembled_sections", [])) + f"\n\n{retry_json.get('conclusion', '')}"
-            final_json.update(retry_json)
-            st.success("✅ Retry afgerond.")
+            try:
+                retry_json = json.loads(clean_json_string(raw_retry))
+                assembled_body = "\n\n".join(retry_json.get("assembled_sections", [])) + f"\n\n{retry_json.get('conclusion', '')}"
+                final_json.update(retry_json)
+                st.success("✅ Retry afgerond.")
+            except:
+                st.error("Retry editor crashte ook op JSON. Terugval naar originele foutieve output.")
 
         # 4. PYTHON LINK INJECTION & IRON FALLBACK
         if "[ANCHOR_SPOT]" in assembled_body:
@@ -271,7 +287,6 @@ if start_btn:
         elif re.search(re.escape(anchor_text), assembled_body, re.IGNORECASE):
             assembled_body = re.sub(re.escape(anchor_text), f"[{anchor_text}]({target_url})", assembled_body, count=1, flags=re.IGNORECASE)
         else:
-            # IRONCLAD FALLBACK: AI compleet gefaald? Python redt de link.
             fallback_str = get_fallback_sentence(language_sel, anchor_text, target_url)
             assembled_body += f"\n\n{fallback_str}"
             st.info("💡 Systeem ingreep: AI negeerde de ankertekst. Geforceerde linguïstische fallback toegepast.")
@@ -282,7 +297,7 @@ if start_btn:
         status.update(label=f"✅ Content Ready in {int(time.time() - start_time)}s", state="complete")
 
     # --- OUTPUT ---
-    st.header(final_json.get('title'))
+    st.header(final_json.get('title', 'Nieuw Artikel'))
     
     col1, col2, col3, col4 = st.columns(4)
     final_wc = count_words(final_json['body'])
