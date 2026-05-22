@@ -5,7 +5,7 @@ import re
 import json
 
 # --- CONFIGURATIE ---
-st.set_page_config(page_title="Authority Engine v42.0 | Enterprise", layout="wide")
+st.set_page_config(page_title="Authority Engine v42.1 | The Human Case", layout="wide")
 
 try:
     client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
@@ -20,7 +20,7 @@ CONFIG = {
     "MAX_WORDS": 1800
 }
 
-# --- TAAL INSTRUCTIES (Uit de JS Code) ---
+# --- TAAL INSTRUCTIES ---
 LANG_INSTRUCTIONS = {
     "NL": "Schrijf het volledige artikel uitsluitend in professioneel, idiomatisch Nederlands op moedertaalniveau. Vermijd letterlijk vertaalde formuleringen en Engelse/Duitse woordkeuze.",
     "EN": "Write the full article exclusively in professional, idiomatic English at native level. Avoid translation-like wording and unnatural phrasing.",
@@ -60,9 +60,8 @@ def clean_json_string(raw_string):
     except: return None
 
 def cleanup_text(text):
-    """Post-processing uit de JS code voor perfecte weergave."""
     t = str(text or '')
-    # Capitalization fix
+    # Capitalization fix voor specifieke foute woorden
     t = re.sub(r'\bDit Artikel\b', 'Dit artikel', t)
     t = re.sub(r'\bDeze Pagina\b', 'Deze pagina', t)
     t = re.sub(r'\bDe Specialist\b', 'de specialist', t)
@@ -73,7 +72,6 @@ def cleanup_text(text):
     return t.strip()
 
 def get_intent_and_target(anchor, language, base_target):
-    """Bepaalt de commerciële/informatieve toon op basis van zoekwoord (uit JS code)."""
     text = anchor.lower()
     intent_tone = "professioneel, overtuigend en betrouwbaar."
     target = base_target
@@ -90,10 +88,10 @@ def get_intent_and_target(anchor, language, base_target):
 def validate_output(text, ban_list):
     return {
         "ban_words_found": [w for w in ban_list if w.lower() in text.lower()],
-        "no_bullets": not re.search(r'(?m)^[-*]\s', text) # True als er GEEN bullets zijn
+        "no_bullets": not re.search(r'(?m)^[-*]\s', text)
     }
 
-# --- SYSTEM PROMPTS (v42.0) ---
+# --- SYSTEM PROMPTS (v42.1) ---
 
 STRATEGIST_SYSTEM = """Jij bent een Hoofdredacteur. Je levert UITSLUITEND JSON.
 TAAL: {language_instruction}
@@ -101,10 +99,14 @@ INTENTIE: {intent_tone}
 TAAK: Ontwerp een essay-structuur die start bij de publisher ({publisher_info}) en eindigt bij {anchor}.
 STIJL-INSTRUCTIE: {tov_instruction}
 
+STRICTE EISEN: 
+- Plan uitsluitend LOPENDE alinea's. GEEN bulletpoints.
+- KOPPEN: Gebruik 'Sentence case'. Schrijf NOOIT Ieder Woord Met Een Hoofdletter in de koppen. Alleen het eerste woord krijgt een hoofdletter.
+
 SCHEMA:
 {{
-  "title": "Pakkende kop",
-  "sections": [ {{ "h2": "Kop", "focus": "Focus", "friction": "Het probleem" }} ]
+  "title": "Pakkende kop (in sentence case)",
+  "sections": [ {{ "h2": "Kop in sentence case", "focus": "Focus", "friction": "Het probleem" }} ]
 }}"""
 
 WRITER_SYSTEM = """Jij bent een Senior Vakjournalist.
@@ -113,29 +115,38 @@ STIJL & INTENTIE: {tov_instruction} Focus op: {intent_tone}
 
 STRICTE EISEN:
 1. GEEN BULLETPOINTS, GEEN OPSOMMINGEN. Schrijf uitsluitend in vloeiende alinea's.
-2. VERBODEN WOORDEN: {ban_list}"""
+2. VERBODEN WOORDEN: {ban_list}
+3. HOOFDLETTERS IN KOPPEN: Gebruik uitsluitend 'Sentence case'. Alleen het eerste woord van een tussenkop krijgt een hoofdletter (bijv. "De impact van materiaal", NIET "De Impact Van Materiaal")."""
 
 EDITOR_SYSTEM = """Jij bent de Hoofdredacteur. Je levert UITSLUITEND JSON.
 TAAL: {language_instruction}
 TAAK: Smeed de hoofdstukken aaneen tot een naadloos geheel van ca. {target} woorden.
 
+STIJL-RICHTLIJN:
+- HOOFDLETTERS: Gebruik absoluut GEEN 'Title Case' in koppen of de titel. Alleen het allereerste woord van een kop (H1/H2) krijgt een hoofdletter. Dit is cruciaal voor een menselijke uitstraling.
+- BULLETS: Verwijder elke opsomming als de schrijver die toch heeft gemaakt.
+
 LINK-STRATEGIE ({mode}):
 Ankertekst: '{anchor}'
-- Exact Match: De zin MOET grammaticaal kloppen met de exacte letters '{anchor}'. Gebruik: "Wie nadenkt over [ANCHOR_SPOT]...", "Het proces van [ANCHOR_SPOT]...".
+- Exact Match: De zin MOET grammaticaal kloppen met de exacte letters '{anchor}'.
 - Natuurlijk: Verbuig of pas de term lichtjes aan zodat de zin native loopt.
 Plaats exact 1x de marker [ANCHOR_SPOT].
 
 SCHEMA:
 {{
-  "title": "Definitieve Kop", "meta": "Meta description", "slug": "url-slug", "body": "## Kop\\n\\nTekst met [ANCHOR_SPOT]..."
+  "title": "Definitieve kop in sentence case", 
+  "meta": "Meta description", 
+  "slug": "url-slug", 
+  "body": "## Tussenkop in sentence case\\n\\nTekst met [ANCHOR_SPOT]..."
 }}"""
 
 RETRY_EDITOR_SYSTEM = """Jij bent de Hoofdredacteur. JE VORIGE WERK WERD AFGEKEURD DOOR DE QA.
-FOUTEN IN VORIGE VERSIE: Je hebt bulletpoints/lijstjes gebruikt OF verboden woorden toegepast.
+FOUTEN IN VORIGE VERSIE: Je hebt bulletpoints gebruikt OF verboden woorden toegepast.
 HERSTELOPDRACHT: 
-1. Herschrijf de tekst. VERWIJDER ELKE BULLETPOINT EN OPSOMMING (- of * of 1.). Maak er lopende alinea's van.
-2. Gebruik native {lang_code}.
-3. Behoud de [ANCHOR_SPOT] integratie.
+1. Herschrijf de tekst. VERWIJDER ELKE BULLETPOINT EN OPSOMMING. Maak er lopende alinea's van.
+2. KOPPEN: Zorg dat koppen NIET Elk Woord Met Een Hoofdletter hebben (gebruik Sentence case).
+3. Gebruik native {lang_code}.
+4. Behoud de [ANCHOR_SPOT] integratie.
 Lever UITSLUITEND JSON volgens het bekende schema (title, meta, slug, body)."""
 
 # --- AI WRAPPER ---
@@ -149,8 +160,8 @@ def call_ai(system, prompt, temp=0.7, json_mode=False):
     return response.choices[0].message.content
 
 # --- UI INTERFACE ---
-st.title("🛡️ Authority Engine v42.0")
-st.caption("Enterprise Edition | Multi-Language, Auto-Retry & Intent Scaling")
+st.title("🛡️ Authority Engine v42.1")
+st.caption("The Human Case Update | No more Title Case Headers")
 
 with st.sidebar:
     st.header("📋 Setup & Locatie")
@@ -173,14 +184,13 @@ if start_btn:
     ban_list_str = ", ".join(current_tov["ban"])
     lang_inst = LANG_INSTRUCTIONS[language_sel]
     
-    # 0. Intent Detection (Dynamic Target)
     intent_tone, dynamic_target = get_intent_and_target(anchor_text, language_sel, base_word_count)
 
-    with st.status(f"🏗️ Enterprise Engine start ({language_sel})...", expanded=True) as status:
-        st.info(f"Intentie gedetecteerd: **{intent_tone}** | Target bijgesteld naar: **{dynamic_target} w**")
+    with st.status(f"🏗️ Engine start ({language_sel})...", expanded=True) as status:
+        st.info(f"Intentie: **{intent_tone}** | Target: **{dynamic_target} w**")
         
         # 1. STRATEGIST
-        st.write("📐 Fase 1: Structuur bouwen (Intent-Driven)...")
+        st.write("📐 Fase 1: Structuur bouwen (Sentence Case Dwang)...")
         strat_sys = STRATEGIST_SYSTEM.format(
             language_instruction=lang_inst, intent_tone=intent_tone, 
             tov_instruction=current_tov["instructie"], publisher_info=publisher_info, anchor=anchor_text
@@ -188,7 +198,7 @@ if start_btn:
         blueprint = json.loads(clean_json_string(call_ai(strat_sys, f"Target: {dynamic_target}w", json_mode=True)))
 
         # 2. WRITER
-        st.write("🖋️ Fase 2: Schrijven met Native Dwang & Frictie-focus...")
+        st.write("🖋️ Fase 2: Schrijven met Native Dwang...")
         full_draft = ""
         sec_target = dynamic_target // len(blueprint.get("sections", [1,2,3,4]))
         
@@ -204,15 +214,15 @@ if start_btn:
             language_instruction=lang_inst, target=dynamic_target, anchor=anchor_text, 
             mode=anchor_mode, tov_instruction=current_tov["instructie"]
         )
-        raw_editor = call_ai(editor_sys, f"Smeed aaneen, zonder bullets:\n{full_draft}", json_mode=True)
+        raw_editor = call_ai(editor_sys, f"Smeed aaneen, let op je hoofdletters in koppen:\n{full_draft}", json_mode=True)
         final_json = json.loads(clean_json_string(raw_editor))
 
-        # --- QA & RETRY LOGICA (Nieuw in v42) ---
+        # --- QA & RETRY ---
         qa_result = validate_output(final_json.get("body", ""), current_tov["ban"])
         if (not qa_result["no_bullets"] or qa_result["ban_words_found"]) and CONFIG["ENABLE_RETRY_ON_QA_FAIL"]:
-            st.warning("⚠️ QA Faalde (Bullets of Ban-words gedetecteerd). Retry Editor wordt gestart...")
+            st.warning("⚠️ QA Faalde. Retry Editor wordt gestart...")
             retry_sys = RETRY_EDITOR_SYSTEM.format(lang_code=language_sel)
-            raw_retry = call_ai(retry_sys, f"Oorspronkelijke output met fouten:\n{final_json.get('body')}", temp=0.4, json_mode=True)
+            raw_retry = call_ai(retry_sys, f"Oorspronkelijke output:\n{final_json.get('body')}", temp=0.4, json_mode=True)
             final_json = json.loads(clean_json_string(raw_retry))
             st.success("✅ Retry succesvol afgerond.")
 
@@ -225,7 +235,6 @@ if start_btn:
             pattern = re.compile(re.escape(anchor_text), re.IGNORECASE)
             body = pattern.sub(f"[{anchor_text}]({target_url})", body, count=1)
         
-        # Cleanup (Capitalization & Whitespace)
         final_json["body"] = cleanup_text(body)
         
         status.update(label=f"✅ Content Ready in {int(time.time() - start_time)}s", state="complete")
@@ -238,7 +247,7 @@ if start_btn:
     col1, col2, col3, col4 = st.columns(4)
     col1.metric("Volume", f"{count_words(final_json['body'])} w", delta=count_words(final_json['body']) - dynamic_target)
     col2.metric("Link", "✅ Aanwezig" if f"({target_url})" in final_json['body'] else "❌ Ontbreekt")
-    col3.metric("Bullet-Vrij", "✅ Ja" if qa_final['no_bullets'] else "❌ Nee (Gefaald)")
+    col3.metric("Bullet-Vrij", "✅ Ja" if qa_final['no_bullets'] else "❌ Nee")
     col4.metric("Ban-List", "✅ Schoon" if not qa_final['ban_words_found'] else f"❌ Fout")
 
     st.markdown("---")
