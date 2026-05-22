@@ -5,7 +5,7 @@ import re
 import json
 
 # --- CONFIGURATIE ---
-st.set_page_config(page_title="Authority Engine v49.0 | Two-Pass Pipeline", layout="wide")
+st.set_page_config(page_title="Authority Engine v50.0 | The Python Hammer", layout="wide")
 
 try:
     client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
@@ -60,6 +60,27 @@ def clean_json_string(raw_string):
         return None
     except: return None
 
+def enforce_sentence_case(text):
+    """
+    De Python Hammer: Pakt elke Markdown kop (#, ##, ###) en forceert 
+    dat ALLEEN de allereerste letter een hoofdletter is. Geen AI die hier omheen kan.
+    """
+    lines = text.split('\n')
+    new_lines = []
+    for line in lines:
+        if line.strip().startswith('#'):
+            match = re.match(r'^([#]+)\s+(.*)', line)
+            if match:
+                prefix = match.group(1)
+                content = match.group(2).strip()
+                # .capitalize() maakt de eerste letter groot en de rest KLEIN.
+                new_lines.append(f"{prefix} {content.capitalize()}")
+            else:
+                new_lines.append(line)
+        else:
+            new_lines.append(line)
+    return '\n'.join(new_lines)
+
 def cleanup_text(text):
     t = str(text or '')
     t = re.sub(r'\bDit Artikel\b', 'Dit artikel', t)
@@ -68,6 +89,8 @@ def cleanup_text(text):
     t = re.sub(r'[ \t]+\n', '\n', t)
     t = re.sub(r'\n{3,}', '\n\n', t)
     t = re.sub(r'[ \t]{2,}', ' ', t)
+    # Voer de Python Hammer uit op de koppen
+    t = enforce_sentence_case(t)
     return t.strip()
 
 def get_intent_and_target(anchor, language, base_target):
@@ -96,7 +119,7 @@ def get_fallback_sentence(language, anchor_text, target_url):
     if language == "FR": return f"Pour plus d'informations pratiques concernant un [{anchor_text}]({target_url}), consultez les options en ligne."
     return f"Meer informatie: [{anchor_text}]({target_url})."
 
-# --- ONGECOMPROMITTEERDE SYSTEM PROMPTS (v49.0) ---
+# --- ONGECOMPROMITTEERDE SYSTEM PROMPTS (v50.0) ---
 
 STRATEGIST_SYSTEM = """Jij bent een Meesterlijke Content Architect. Je levert UITSLUITEND JSON.
 TAAL: {language_instruction}
@@ -107,15 +130,15 @@ TAAK:
 1. USE-CASE BRUG: Hoe gebruikt de lezer van {publisher_info} het product ({anchor}) fysiek? Verbind dit.
 2. EXPERT DATA: Bedenk per hoofdstuk 3 snoeiharde, concrete datapunten (afmetingen, feiten, materiaalverschillen).
 3. STRUCTUUR: Plan 4 of 5 unieke secties.
-4. KOPPEN: Gebruik uitsluitend 'Sentence case' voor alle koppen.
+4. KOPPEN: Gebruik uitsluitend kleine letters voor alle woorden in de kop, behalve het allereerste woord.
 
 SCHEMA:
 {{
-  "title": "Sterke kop (Sentence case)",
+  "title": "Dit is een sterke kop zonder onnodige hoofdletters",
   "use_case_bridge": "Jouw brug tussen publisher en product.",
   "sections": [
     {{ 
-      "h2": "Tussenkop in sentence case", 
+      "h2": "Dit is een tussenkop met kleine letters", 
       "key_points": ["Hard feit 1", "Diepgaand inzicht 2", "Vuistregel 3"],
       "friction": "Welk probleem lossen we hier op?"
     }}
@@ -144,9 +167,10 @@ JOUW TAKEN:
 1. INKORT-VERBOD: Behoud de volledige lengte en diepgang van de originele tekst.
 2. BAN-WORDS ZUIVEREN: Inspecteer de tekst. Als je woorden ziet als 'essentieel', 'cruciaal', 'esthetisch' of 'esthetiek', herschrijf je die zin direct! VERBODEN WOORDEN: {ban_list}.
 3. BULLET-ZUIVERING: Als er opsommingen of streepjes (-) in staan, maak je er lopende alinea's van.
-4. DE ANKERTEKST: Plaats EXACT ÉÉN KEER in de tekst de marker [ANCHOR_SPOT] voor de term '{anchor}'. 
+4. KOPPEN-CHECK: Zet alle hoofdletters in de Markdown koppen (##) om naar kleine letters. Alleen het eerste woord mag een hoofdletter hebben.
+5. DE ANKERTEKST: Plaats EXACT ÉÉN KEER in de tekst de marker [ANCHOR_SPOT] voor de term '{anchor}'. 
    - Modus ({mode}): Verwerk deze term op de meest vloeiende, onzichtbare manier in een bestaande alinea. Geen geforceerde introducties. De zin moet 100% kloppend Nederlands zijn.
-5. CONCLUSIE: Schrijf helemaal aan het einde één krachtige, afsluitende alinea.
+6. CONCLUSIE: Schrijf helemaal aan het einde één krachtige, afsluitende alinea.
 
 Lever uitsluitend de gezuiverde Markdown tekst af. Zorg dat koppen (##) behouden blijven."""
 
@@ -156,7 +180,7 @@ Pas de inhoud van de tekst NIET aan.
 
 SCHEMA:
 {{
-  "title": "Een pakkende titel gebaseerd op de tekst (Sentence case)",
+  "title": "Titel in sentence case (kleine letters behalve het eerste woord)",
   "meta": "SEO meta description van max 155 tekens",
   "slug": "url-slug",
   "body": "[Hier plak je de VOLLEDIGE, EXACTE tekst die je in de prompt hebt ontvangen, inclusief alle ## koppen en de [ANCHOR_SPOT]]"
@@ -173,8 +197,8 @@ def call_ai(system, prompt, temp=0.7, json_mode=False):
     return response.choices[0].message.content
 
 # --- UI INTERFACE ---
-st.title("🛡️ Authority Engine v49.0")
-st.caption("The Two-Pass Pipeline | Absolute focus op linguïstische kwaliteit")
+st.title("🛡️ Authority Engine v50.0")
+st.caption("The Python Hammer | 100% Garantie op Sentence Case Koppen")
 
 with st.sidebar:
     st.header("📋 Setup & Locatie")
@@ -211,7 +235,7 @@ if start_btn:
         raw_strat = call_ai(strat_sys, f"Target: {dynamic_target}w", json_mode=True)
         blueprint = json.loads(clean_json_string(raw_strat) or "{}")
         
-        # 2. WRITER (Parallel Section Generation)
+        # 2. WRITER
         st.write("🖋️ Fase 2: Concepttekst schrijven (in silo's)...")
         full_draft = ""
         sec_target = dynamic_target // max(1, len(blueprint.get("sections", [1,2,3,4])))
@@ -225,21 +249,21 @@ if start_btn:
             draft = call_ai(write_sys, write_prompt)
             full_draft += f"## {section.get('h2')}\n{draft}\n\n"
 
-        # 3. THE WEAVER (The Magic Step - Plain text parsing!)
+        # 3. THE WEAVER
         st.write("✨ Fase 3: The Weaver (Kwaliteit en Ban-words opschonen)...")
         weaver_sys = WEAVER_SYSTEM.format(
             language_instruction=lang_inst, tov_instruction=current_tov["instructie"],
             ban_list=ban_list_str, anchor=anchor_text, mode=anchor_mode
         )
-        weaved_text = call_ai(weaver_sys, f"Zuiver dit artikel. Maak het vloeiend, lang, en integreer de [ANCHOR_SPOT]:\n\n{full_draft}", json_mode=False)
+        weaved_text = call_ai(weaver_sys, f"Zuiver dit artikel. Maak het vloeiend, lang, let op je koppen, en integreer de [ANCHOR_SPOT]:\n\n{full_draft}", json_mode=False)
 
-        # 4. THE PACKAGER (Safe JSON packaging)
+        # 4. THE PACKAGER
         st.write("📦 Fase 4: The Packager (JSON verpakken)...")
         packager_raw = call_ai(PACKAGER_SYSTEM, f"Lees deze tekst en verpak het EXACT in JSON:\n\n{weaved_text}", json_mode=True)
         
         try:
             final_json = json.loads(clean_json_string(packager_raw))
-            assembled_body = final_json.get("body", weaved_text) # Fallback to raw text if parsing fails
+            assembled_body = final_json.get("body", weaved_text) 
         except:
             st.error("Packager faalde, fallback naar platte tekst.")
             final_json = {"title": "Gegenereerd Artikel"}
@@ -256,13 +280,16 @@ if start_btn:
             assembled_body += f"\n\n{fallback_str}"
             st.info("💡 Systeem ingreep: AI negeerde de ankertekst. Geforceerde linguïstische fallback toegepast.")
 
+        # De genadeloze opschoning en Python Hammer uitvoeren op de body én de titel
         final_json["body"] = cleanup_text(assembled_body)
+        if "title" in final_json:
+            final_json["title"] = final_json["title"].capitalize()
+
         qa_final = validate_output(final_json['body'], target_url, current_tov["ban"])
-        
         status.update(label=f"✅ Content Ready in {int(time.time() - start_time)}s", state="complete")
 
     # --- OUTPUT ---
-    st.header(final_json.get('title', 'Nieuw Artikel'))
+    st.header(final_json.get('title', 'Nieuw artikel'))
     
     col1, col2, col3, col4 = st.columns(4)
     final_wc = count_words(final_json['body'])
